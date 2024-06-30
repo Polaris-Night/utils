@@ -1,0 +1,3 @@
+set(LIB_NAME disasm)
+file(GLOB SRCS ${CMAKE_CURRENT_LIST_DIR}/*.c ${CMAKE_CURRENT_LIST_DIR}/*.h)
+add_library(${LIB_NAME} STATIC ${SRCS})
