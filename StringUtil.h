@@ -1,9 +1,7 @@
 #pragma once
 
-#include <optional>
 #include <sstream>
 #include <string>
-#include <type_traits>
 #include <vector>
 
 namespace utils {
@@ -21,22 +19,54 @@ public:
      * @brief 根据指定分隔符来分割字符串
      *
      * @param str 字符串
-     * @param delim 分隔符
-     * @param trim_empty 是否去除空字符串
+     * @param separator 分隔符
      * @return std::vector<std::string>
      */
-    static stringlist Split( const std::string &str, const std::string &delim, const bool trim_empty = false );
-
+    static stringlist Split( const std::string &str, const std::string &separator );
     /**
      * @brief 拼接字符串
      *
-     * @param tokens 字符串数组
-     * @param delim 分隔符
+     * @tparam Args
+     * @param separator 分隔符
+     * @param args 字符串列表
      * @return std::string
      */
-    static std::string Join( const stringlist &tokens, const std::string &delim, const bool trim_empty = false );
+    template <typename... Args>
+    static std::string Join( const std::string &separator, Args... args ) {
+        std::ostringstream oss;
+        bool               first = true;
+
+        ( ( oss << ( first ? "" : separator ) << args, first = false ), ... );
+
+        return oss.str();
+    }
     /**
-     * @brief 去除\r\n\t
+     * @brief 针对于字符串容器的拼接函数
+     *
+     * @tparam Container
+     * @param separator 分隔符
+     * @param container 字符串容器
+     * @return std::string
+     */
+    template <typename Container>
+    static std::string Join( const std::string &separator, const Container &container ) {
+        std::string result;
+        auto        iter = std::cbegin( container );
+        auto        end  = std::cend( container );
+
+        if ( iter != end ) {
+            result += *iter;  // 加入第一个元素到结果中
+            ++iter;
+        }
+        // 遍历容器剩余的元素，将分隔符和元素依次连接到结果中
+        for ( ; iter != end; ++iter ) {
+            result += separator;
+            result += *iter;
+        }
+        return result;
+    }
+    /**
+     * @brief 去除\r\n\t和空格
      *
      * @param str 字符串
      * @return std::string

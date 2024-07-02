@@ -95,8 +95,7 @@ TarResult TarObject::Compress() const {
             cmd.emplace_back( file );
         }
     }
-    // printf( "%s\n", StringUtil::Join( cmd, " " ).c_str() );
-    if ( std::system( StringUtil::Join( cmd, " " ).c_str() ) != 0 ) {
+    if ( std::system( StringUtil::Join( " ", cmd ).c_str() ) != 0 ) {
         result.success = false;
     }
     else {
@@ -118,7 +117,7 @@ TarResult TarUtil::Compress( const std::string &tar_path, const std::set<std::st
     TarResult  result;
     stringlist cmd{ "tar", "-czfP", tar_path };
     cmd.insert( cmd.end(), source_list.begin(), source_list.end() );
-    if ( std::system( StringUtil::Join( cmd, " " ).c_str() ) != 0 ) {
+    if ( std::system( StringUtil::Join( " ", cmd ).c_str() ) != 0 ) {
         result.success = false;
     }
     else {

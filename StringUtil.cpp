@@ -14,18 +14,18 @@ stringlist StringUtil::Compact( const stringlist &tokens ) {
     return compacted;
 }
 
-stringlist StringUtil::Split( const std::string &str, const std::string &delim, const bool trim_empty ) {
+stringlist StringUtil::Split( const std::string &str, const std::string &separator ) {
     size_t     pos, last_pos = 0, len;
     stringlist tokens;
 
     while ( true ) {
-        pos = str.find( delim, last_pos );
+        pos = str.find( separator, last_pos );
         if ( pos == std::string::npos ) {
             pos = str.size();
         }
 
         len = pos - last_pos;
-        if ( !trim_empty || len != 0 ) {
+        if ( len != 0 ) {
             tokens.push_back( str.substr( last_pos, len ) );
         }
 
@@ -33,26 +33,11 @@ stringlist StringUtil::Split( const std::string &str, const std::string &delim, 
             break;
         }
         else {
-            last_pos = pos + delim.size();
+            last_pos = pos + separator.size();
         }
     }
 
     return tokens;
-}
-
-std::string StringUtil::Join( const stringlist &tokens, const std::string &delim, const bool trim_empty ) {
-    if ( trim_empty ) {
-        return Join( Compact( tokens ), delim, false );
-    }
-    else {
-        std::stringstream ss;
-        for ( size_t i = 0; i < tokens.size() - 1; ++i ) {
-            ss << tokens[i] << delim;
-        }
-        ss << tokens[tokens.size() - 1];
-
-        return ss.str();
-    }
 }
 
 std::string StringUtil::Trim( const std::string &str ) {

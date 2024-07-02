@@ -6,8 +6,8 @@
 #include <memory>
 #include "Macros.h"
 
-#define PRINT_INFO( fmt, ... ) std::fprintf( stderr, fmt "\n", __VA_ARGS__ )
-#define UNUSE( x )          (void)x
+#define CONSOLE_LOG( fmt, ... ) std::fprintf( stderr, fmt "\n", __VA_ARGS__ )
+#define UNUSE( x )              (void)x;
 
 namespace fs = std::filesystem;
 
@@ -29,20 +29,18 @@ static bool DumpCallback
     ( const char *dump_dir, const char *minidump_id, void *context, bool succeeded )
 #endif
 {
-    UNUSE( context );
+    UNUSE( context )
 #if defined( PLATFORM_OS_LINUX )
-    PRINT_INFO( "%s, dump path: %s\n", succeeded ? "Succeed to write minidump" : "Failed to write minidump",
-             descriptor.path() );
+    CONSOLE_LOG( "%s, dump path: %s\n", succeeded ? "Succeed to write minidump" : "Failed to write minidump",
+                 descriptor.path() );
 #elif defined( PLATFORM_OS_WINDOWS )
-    UNUSE( assertion );
-    UNUSE( exinfo );
-    QString path = QString::fromWCharArray( dump_dir ) + QLatin1String( "/" ) + QString::fromWCharArray( minidump_id );
-    PRINT_INFO( "%s, dump path: %s\n", succeeded ? "Succeed to write minidump" : "Failed to write minidump",
-             qPrintable( path ) );
+    UNUSE( assertion )
+    UNUSE( exinfo )
+    CONSOLE_LOG( "%s, dump path: %S/%S\n", succeeded ? "Succeed to write minidump" : "Failed to write minidump",
+                 dump_dir, minidump_id );
 #elif defined( PLATFORM_OS_OSX )
-    QString path = QString::fromUtf8( dump_dir ) + QLatin1String( "/" ) + QString::fromUtf8( minidump_id );
-    PRINT_INFO( "%s, dump path: %s\n", succeeded ? "Succeed to write minidump" : "Failed to write minidump",
-             qPrintable( path ) );
+    CONSOLE_LOG( "%s, dump path: %s/%s\n", succeeded ? "Succeed to write minidump" : "Failed to write minidump",
+                 dump_dir, minidump_id );
 #endif
     return succeeded;
 }
@@ -65,14 +63,14 @@ public:
                 return fs::last_write_time( lhs ) < fs::last_write_time( rhs );
             } );
             while ( total_size > max_size * 1024 * 1024 || files.size() > max_count ) {
-                PRINT_INFO( "Remove dump file: %s", files.front().c_str() );
+                CONSOLE_LOG( "Remove dump file: %s", files.front().c_str() );
                 total_size -= fs::file_size( files.front() );
                 fs::remove( files.front() );
                 files.erase( files.begin() );
             }
         }
         catch ( const fs::filesystem_error &e ) {
-            PRINT_INFO( "Error: %s", e.what() );
+            CONSOLE_LOG( "Error: %s", e.what() );
         }
     }
 
@@ -116,12 +114,12 @@ void BreakpadHandler::SetDumpPath( const std::string &path ) {
         abs_path = fs::absolute( path );
         fs::create_directories( abs_path );
         if ( !fs::is_directory( abs_path ) ) {
-            PRINT_INFO( "Error: %s is not exist", path.c_str() );
+            CONSOLE_LOG( "Error: %s is not exist", path.c_str() );
             return;
         }
     }
     catch ( const fs::filesystem_error &e ) {
-        PRINT_INFO( "Error: %s", e.what() );
+        CONSOLE_LOG( "Error: %s", e.what() );
         return;
     }
     d->dump_path = std::move( abs_path );
@@ -136,7 +134,7 @@ void BreakpadHandler::SetMaxCount( uint32_t max_count ) {
 }
 
 void BreakpadHandler::GenerateDump() {
-    if (d->handler) {
+    if ( d->handler ) {
         d->handler->WriteMinidump();
     }
 }
@@ -155,7 +153,7 @@ std::vector<std::string> BreakpadHandler::GetDumpFileList() const {
         }
     }
     catch ( const fs::filesystem_error &e ) {
-        PRINT_INFO( "Error: %s", e.what() );
+        CONSOLE_LOG( "Error: %s", e.what() );
     }
     return dump_files;
 }

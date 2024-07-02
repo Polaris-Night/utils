@@ -25,6 +25,19 @@ bool File::Exists() const {
     return FileUtil::Exists( name_ );
 }
 
+bool File::Flush() {
+    if ( !IsOpened() ) {
+        return false;
+    }
+    try {
+        f_.flush();
+        return true;
+    }
+    catch ( const std::ios_base::failure & ) {
+        return false;
+    }
+}
+
 std::string File::GetFileName() const {
     return name_;
 }

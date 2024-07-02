@@ -55,6 +55,13 @@ public:
      */
     bool Exists() const;
     /**
+     * @brief 刷新缓冲区
+     *
+     * @return true
+     * @return false
+     */
+    bool Flush();
+    /**
      * @brief 获取文件路径
      *
      * @return std::string
@@ -102,7 +109,7 @@ public:
      */
     bool Sync();
     /**
-     * @brief 设置文件路径，请在关闭文件状态下使用
+     * @brief 设置文件路径，未打开文件时使用
      *
      * @param name
      */
