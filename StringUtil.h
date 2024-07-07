@@ -121,6 +121,22 @@ public:
      * @return false
      */
     static bool Contains( const std::string &str, const std::string &token );
+    /**
+     * @brief 转换为十六进制字符串
+     *
+     * @param data 数据
+     * @param separator 分隔符
+     * @return std::string
+     */
+    static std::string ConvertToHexStr( const char *data, char separator = ' ' );
+    /**
+     * @brief 转换为二进制字符串
+     *
+     * @param value 数值
+     * @param count 二进制位数
+     * @return std::string
+     */
+    static std::string IntToBitString( uint64_t value, int count );
 };
 
 }  // namespace utils

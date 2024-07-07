@@ -3,3 +3,4 @@
 ## TODO
 - [ ] Timer
 - [ ] FileLocker
+- [ ] TimeUtil

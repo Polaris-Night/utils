@@ -1,5 +1,7 @@
 #include "StringUtil.h"
 #include <algorithm>
+#include <cstring>
+#include <iomanip>
 
 namespace utils {
 stringlist StringUtil::Compact( const stringlist &tokens ) {
@@ -100,6 +102,29 @@ bool StringUtil::EndWith( const std::string &str, const std::string &suffix ) {
 
 bool StringUtil::Contains( const std::string &str, const std::string &token ) {
     return str.find( token ) != std::string::npos ? true : false;
+}
+
+std::string StringUtil::ConvertToHexStr( const char *data, char separator ) {
+    std::stringstream ss;
+    size_t            len = std::strlen( data );
+    for ( size_t i = 0; i < len; ++i ) {
+        // 每个字节转换为两位十六进制
+        ss << std::setw( 2 ) << std::setfill( '0' ) << std::hex << (int)(unsigned char)data[i];
+        // 在每两个字节之间添加空格
+        if ( i < len - 1 ) {
+            ss << separator;
+        }
+    }
+    return ss.str();
+}
+
+std::string StringUtil::IntToBitString( uint64_t value, int count ) {
+    std::string bit_string;
+    for ( int i = count - 1; i >= 0; --i ) {
+        uint64_t mask = 1ULL << i;
+        bit_string += ( value & mask ) ? '1' : '0';
+    }
+    return bit_string;
 }
 
 }  // namespace utils
