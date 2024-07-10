@@ -5,6 +5,8 @@
 #include <sstream>
 #include <string>
 
+#include "Macros.h"
+
 namespace utils {
 
 class File {
@@ -36,11 +38,8 @@ public:
 public:
     explicit File() = default;
     File( const std::string &name );
-    File( const File & ) = delete;
-    File( File && )      = delete;
     ~File();
-    File &operator=( const File & ) = delete;
-    File &operator=( File && )      = delete;
+    DISABLE_COPY_MOVE( File )
 
     /**
      * @brief 关闭文件
