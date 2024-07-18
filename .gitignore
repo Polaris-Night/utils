@@ -104,6 +104,7 @@ CMakeLists.txt.user*
 tmp
 **__pycache__/
 bak
+**/.cache
 
 # Qt Design Studio
 *.qtds*

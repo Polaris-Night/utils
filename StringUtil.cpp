@@ -105,12 +105,15 @@ bool StringUtil::Contains( const std::string &str, const std::string &token ) {
 }
 
 std::string StringUtil::ConvertToHexStr( const char *data, char separator ) {
+    if ( data == nullptr ) {
+        return "";
+    }
     std::stringstream ss;
     size_t            len = std::strlen( data );
     for ( size_t i = 0; i < len; ++i ) {
         // 每个字节转换为两位十六进制
         ss << std::setw( 2 ) << std::setfill( '0' ) << std::hex << (int)(unsigned char)data[i];
-        // 在每两个字节之间添加空格
+        // 在每两个字符之间添加间隔符
         if ( i < len - 1 ) {
             ss << separator;
         }

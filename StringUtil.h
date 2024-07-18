@@ -2,10 +2,23 @@
 
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace utils {
 using stringlist = std::vector<std::string>;
+
+template <typename T>
+struct CanConvertToString
+    : std::disjunction<std::is_convertible<T, std::string>, std::is_convertible<T, std::string_view>> {};
+
+template <typename... Args>
+struct IsStringType : std::conjunction<CanConvertToString<Args>...> {};
+
+template <typename T>
+constexpr bool IsStringType_v = IsStringType<T>::value;
+
 class StringUtil {
 public:
     /**
@@ -33,6 +46,8 @@ public:
      */
     template <typename... Args>
     static std::string Join( const std::string &separator, Args... args ) {
+        static_assert( IsStringType<Args...>::value, "Join requires argument is string type" );
+        static_assert( sizeof...( args ) > 0, "Join requires at least one argument" );
         std::ostringstream oss;
         bool               first = true;
 
@@ -43,13 +58,13 @@ public:
     /**
      * @brief 针对于字符串容器的拼接函数
      *
-     * @tparam Container
+     * @tparam Container 容器类型，其元素类型为std::string
      * @param separator 分隔符
      * @param container 字符串容器
      * @return std::string
      */
-    template <typename Container>
-    static std::string Join( const std::string &separator, const Container &container ) {
+    template <template <class...> class Container>
+    static std::string Join( const std::string &separator, const Container<std::string> &container ) {
         std::string result;
         auto        iter = std::cbegin( container );
         auto        end  = std::cend( container );
