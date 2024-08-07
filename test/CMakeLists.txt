@@ -2,6 +2,7 @@ add_subdirectory(googletest)
 
 set(TEST_SRC
     test_stringutil.cpp
+    test_compare.cpp
     CACHE INTERNAL "" FORCE
 )
 
