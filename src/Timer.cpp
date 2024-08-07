@@ -46,4 +46,39 @@ std::chrono::steady_clock::time_point ElapsedTimer::GetReset() const {
 }
 
 
+Timer::Timer( int msec ) {}
+
+Timer::Timer( Milliseconds msec ) {}
+
+void Timer::Start() {
+    if ( !is_running_ ) {
+    }
+}
+
+void Timer::Stop() {
+    if ( is_running_ ) {
+    }
+}
+
+void Timer::Restart() {
+    Stop();
+    Start();
+}
+
+void Timer::SetInterval( int msec ) {
+    interval_ = Milliseconds( msec );
+}
+
+void Timer::SetInterval( Milliseconds msec ) {
+    interval_ = msec;
+}
+
+bool Timer::IsRunning() const {
+    return is_running_;
+}
+
+bool Timer::IsTimeout() const {
+    return false;
+}
+
 }  // namespace utils

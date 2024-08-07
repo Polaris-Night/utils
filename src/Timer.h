@@ -91,4 +91,25 @@ private:
     std::chrono::steady_clock::time_point pause_time_{};
 };
 
+class Timer {
+public:
+    Timer() = default;
+    Timer( int msec );
+    Timer( Milliseconds msec );
+    DISABLE_COPY_MOVE( Timer )
+
+    void Start();
+    void Stop();
+    void Restart();
+    void SetInterval( int msec );
+    void SetInterval( Milliseconds msec );
+
+    bool IsRunning() const;
+    bool IsTimeout() const;
+
+private:
+    bool         is_running_{};
+    Milliseconds interval_{};
+};
+
 }  // namespace utils
