@@ -28,6 +28,10 @@ file(GLOB COMMON_TEST_SRC
     ${COMMON_SRC_DIR}/*test.cc
 )
 list(REMOVE_ITEM COMMON_SRC ${COMMON_TEST_SRC})
+if (UNIX)
+    enable_language(ASM)
+    list(APPEND COMMON_SRC ${COMMON_SRC_DIR}/breakpad_getcontext.S)
+endif()
 add_library(${COMMON_LIB} STATIC ${COMMON_SRC})
 target_include_directories(${COMMON_LIB} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
@@ -46,6 +50,83 @@ list(REMOVE_ITEM CLIENT_SRC ${CLIENT_TEST_SRC} ${CLIENT_SRC_DIR}/sender/google_c
 add_library(${CLIENT_LIB} STATIC ${CLIENT_SRC})
 target_link_libraries(${CLIENT_LIB} PUBLIC ${COMMON_LIB})
 target_include_directories(${CLIENT_LIB} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+
+# dump_syms in linux
+set(DUMP_SYMS_SRC
+    ${CMAKE_CURRENT_LIST_DIR}/tools/linux/dump_syms/dump_syms.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/dwarf_cfi_to_module.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/dwarf_cu_to_module.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/dwarf_line_to_module.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/dwarf_range_list_handler.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/language.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/module.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/path_helper.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/stabs_reader.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/stabs_to_module.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/dwarf/bytereader.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/dwarf/dwarf2diehandler.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/dwarf/dwarf2reader.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/dwarf/elf_reader.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/crc32.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/dump_symbols.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/elf_symbols_to_module.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/elfutils.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/file_id.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/linux_libc_support.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/memory_mapped_file.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/safe_readlink.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/elf_symbols_to_module.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/linux/elf_symbols_to_module.cc
+)
+add_executable(dump_syms ${DUMP_SYMS_SRC})
+target_link_libraries(dump_syms PRIVATE ${COMMON_LIB} z)
+target_include_directories(dump_syms PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+
+# minidump_stackwalk in linux
+set(MINUDUMP_STACKWALK_SRC
+    ${CMAKE_CURRENT_LIST_DIR}/common/path_helper.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/minidump_stackwalk.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/basic_code_modules.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/basic_source_line_resolver.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/call_stack.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/cfi_frame_info.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/convert_old_arm64_context.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/disassembler_x86.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/dump_context.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/dump_object.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/exploitability.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/exploitability_linux.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/exploitability_win.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/logging.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/minidump.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/minidump_processor.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/pathname_stripper.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/process_state.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/proc_maps_linux.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/simple_symbol_supplier.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/source_line_resolver_base.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stack_frame_cpu.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stack_frame_symbolizer.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalk_common.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_address_list.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_amd64.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_arm.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_arm64.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_mips.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_ppc.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_ppc64.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_riscv.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_riscv64.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_sparc.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_x86.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/symbolic_constants_win.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/tokenize.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/disassembler_objdump.cc
+)
+add_executable(minidump_stackwalk ${MINUDUMP_STACKWALK_SRC})
+target_link_libraries(minidump_stackwalk PRIVATE ${COMMON_LIB} disasm)
+target_include_directories(minidump_stackwalk PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
 install(
     TARGETS ${CLIENT_LIB}
