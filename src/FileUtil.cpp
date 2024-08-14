@@ -149,6 +149,17 @@ void File::Write( const char *data ) {
     f_ << data;
 }
 
+int File::Handle() {
+    class Helper : public std::filebuf {
+    public:
+        int handle() { return _M_file.fd(); }
+    };
+    if ( !IsOpened() ) {
+        return -1;
+    }
+    return static_cast<Helper &>( *f_.rdbuf() ).handle();
+}
+
 void File::InitPermission() {
     if ( !Exists() ) {
         return;

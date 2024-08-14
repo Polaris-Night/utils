@@ -22,11 +22,11 @@ public:
     void Init();
 
     /**
-     * @brief 设置dump生成目录
+     * @brief 设置dump根目录
      *
      * @param path
      */
-    void SetDumpPath( const std::string &path );
+    void SetDumpRootPath( const std::string &path, bool git_hash_as_dump_path = true );
     /**
      * @brief 设置dump目录最大容量，单位MB
      *
@@ -46,11 +46,11 @@ public:
     void GenerateDump();
 
     /**
-     * @brief 获取dump目录路径
+     * @brief 获取dump根目录
      *
      * @return std::string
      */
-    std::string GetDumpPath() const;
+    std::string GetDumpRootPath() const;
     /**
      * @brief 获取dump目录下dump文件列表
      *

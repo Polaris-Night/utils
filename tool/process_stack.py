@@ -71,7 +71,11 @@ class Dumper:
         return list(lib_set)
 
     def get_dumps(self):
-        self.dump_list = [os.path.join(self.dump_path, f) for f in os.listdir(self.dump_path) if f.endswith(".dmp")]
+        self.dump_list = [
+            os.path.join(dirpath, f)
+            for dirpath, _, filenames in os.walk(self.dump_path)
+            for f in fnmatch.filter(filenames, "*.dmp")
+        ]
 
     def create_symbol(self, binary):
         # 生成sym文件

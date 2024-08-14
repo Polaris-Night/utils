@@ -38,14 +38,14 @@ public:
 public:
     explicit File() = default;
     File( const std::string &name );
-    ~File();
+    virtual ~File();
     DISABLE_COPY_MOVE( File )
 
     /**
      * @brief 关闭文件
      *
      */
-    void Close();
+    virtual void Close();
     /**
      * @brief 判断文件是否存在
      *
@@ -86,7 +86,7 @@ public:
      * @return true
      * @return false
      */
-    bool Open( OpenMode mode );
+    virtual bool Open( OpenMode mode );
     /**
      * @brief 移除文件，若文件已打开，将关闭文件
      *
@@ -135,6 +135,9 @@ public:
      */
     void Write( const char *data );
 
+protected:
+    int Handle();
+
 private:
     /**
      * @brief 初始化文件权限
@@ -145,7 +148,7 @@ private:
 private:
     std::string  name_;
     std::string  error_string_;
-    Permissions  permissions_;
+    Permissions  permissions_{ Permissions::None };
     std::fstream f_;
 };
 
@@ -203,9 +206,10 @@ public:
      * @param path
      */
     template <typename... Args>
-    static std::string JoinPaths( Args... path ) {
+    static std::string JoinPaths( Args... paths ) {
         std::ostringstream oss;
-        int                unpack[] = { 0, ( oss << '/' << CleanPath( path ), 0 )... };
+        bool               first = true;
+        int unpack[] = { 0, ( ( oss << ( first ? "" : "/" ) << CleanPath( paths ), first = false ), 0 )... };
         (void)unpack;  // 防止编译器警告未使用变量
         return oss.str();
     }

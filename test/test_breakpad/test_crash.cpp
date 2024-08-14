@@ -3,7 +3,7 @@
 
 int main() {
     auto &handler = utils::BreakpadHandler::Instance();
-    handler.SetDumpPath( "." );
+    handler.SetDumpRootPath( "." );
     handler.Init();
     testCrash();
     return 0;
