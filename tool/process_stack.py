@@ -29,36 +29,47 @@ from argparse import ArgumentParser
                 libtest.so.sym
 '''
 
-WORKSPACE = os.path.dirname(__file__)
+WORKSPACE = os.path.abspath(os.path.dirname(__file__))
 DUMP_SYMS_DEFAULT = os.path.join(WORKSPACE, "dump_syms")
 MINIDUMP_STACKWALK_DEFAULT = os.path.join(WORKSPACE, "minidump_stackwalk")
 
-def run_cmd(cmd, check=False):
+def init_logging():
+    fmt = '%(asctime)s [%(filename)s:%(lineno)d] %(levelname)s - %(message)s'
+    logging.basicConfig(level=logging.INFO, format=fmt)
+
+def run_command(command, check=True, **kwargs):
     try:
-        pid = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        stdout, stderr = pid.communicate()
-        if check and pid.returncode != 0:
-            raise subprocess.CalledProcessError(pid.returncode, cmd)
-        return stdout, stderr
+        result = subprocess.run(
+            command,
+            check=check,
+            shell=True,
+            capture_output=True,
+            text=True,
+            **kwargs
+        )
+        return result
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Executing command: {command}")
+        logging.error(f"Command output: {e.stderr}")
+        raise e
     except Exception as e:
-        print(f"Error executing command: {cmd}")
-        raise
+        logging.error(f"Executing command: {command}")
+        raise e
 
 def find_shared_libraries(root_dir):
     return [os.path.join(dirpath, filename)
             for dirpath, _, filenames in os.walk(root_dir)
-            for filename in fnmatch.filter(filenames, '*.so*')]
+            for filename in fnmatch.filter(filenames, "*.so*")]
 
 class Dumper:
     def __init__(self, app, dump_path, dump_syms, minidump_stackwalk, libs, libs_dir):
-        self.appname = os.path.basename(app)
         self.app = os.path.abspath(app)
         self.dump_path = os.path.abspath(dump_path)
         self.symbols_path = os.path.join(WORKSPACE, "symbols")
         self.dump_syms = dump_syms
         self.minidump_stackwalk = minidump_stackwalk
-        self.dump_list = []
         self.lib_list = self.init_libs(libs, libs_dir)
+        self.get_dumps()
 
     def __del__(self):
         if os.path.exists(self.symbols_path):
@@ -82,7 +93,7 @@ class Dumper:
         bin = os.path.abspath(binary)
         name = os.path.basename(bin)
         sym = os.path.join(WORKSPACE, f"{name}.sym")
-        run_cmd(f"{self.dump_syms} {bin} > {sym}")
+        run_command(f"{self.dump_syms} {bin} > {sym}")
         # 读取sym首行获取到module id值
         with open(sym, 'r') as f:
             module_id = next(f).split()[-2]
@@ -91,28 +102,28 @@ class Dumper:
         os.makedirs(dir_path, exist_ok=True)
         shutil.move(sym, dir_path)
         sym_path_final = os.path.join(dir_path, f"{name}.sym")
-        print(f"generate symbol {sym_path_final}")
+        logging.info(f"generate symbol {sym_path_final}")
 
     def create_stack(self, dump_file):
         stack_file = os.path.splitext(dump_file)[0] + ".stack"
         error_log = os.path.join(os.path.dirname(dump_file), "error.txt")
-        run_cmd(f"{self.minidump_stackwalk} {dump_file} {self.symbols_path} > {stack_file} 2> {error_log}")
-        print(f"generate stack for {dump_file} successfully: {stack_file}")
+        run_command(f"{self.minidump_stackwalk} {dump_file} {self.symbols_path} > {stack_file} 2> {error_log}")
+        logging.info(f"generate stack {stack_file}")
 
     def run(self):
         self.create_symbol(self.app)
         for lib in self.lib_list:
             self.create_symbol(lib)
-        self.get_dumps()
         for dump in self.dump_list:
             self.create_stack(dump)
 
 def main():
+    init_logging()
     parser = ArgumentParser(description="Process minidump files.")
     parser.add_argument("-a", "--app", dest="app", required=True, help="Path to the application binary")
     parser.add_argument("-d", "--dump-dir", dest="dump_path", required=True, help="Directory containing .dmp files")
-    parser.add_argument("-l", "--libs", dest="libs", nargs='+', help="Path to the library binary")
-    parser.add_argument("-L", "--libs-dir", dest="libs_dir", help="Path to the library binary")
+    parser.add_argument("-l", "--libs", dest="libs", nargs='+', help="Path to the library")
+    parser.add_argument("-L", "--libs-dir", dest="libs_dir", help="Path to the library directory")
     parser.add_argument("-s", "--dump-syms", dest="dump_syms", help="Path to dump_syms binary")
     parser.add_argument("-m", "--minidump-stackwalk", dest="minidump_stackwalk", help="Path to minidump_stackwalk binary")
 
@@ -121,9 +132,9 @@ def main():
     dump_syms = DUMP_SYMS_DEFAULT
     minidump_stackwalk = MINIDUMP_STACKWALK_DEFAULT
     if args.dump_syms:
-        dump_syms = args.dump_syms
+        dump_syms = os.path.abspath(args.dump_syms)
     if args.minidump_stackwalk:
-        minidump_stackwalk = args.minidump_stackwalk
+        minidump_stackwalk = os.path.abspath(args.minidump_stackwalk)
 
     try:
         dumper = Dumper(app=args.app,

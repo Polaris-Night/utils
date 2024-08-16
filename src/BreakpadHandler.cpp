@@ -17,8 +17,19 @@
     #include "client/mac/handler/exception_handler.h"
 #endif
 
-#define CONSOLE_LOG( fmt, ... ) std::fprintf( stderr, fmt "\n", __VA_ARGS__ )
-#define UNUSE( x )              (void)x;
+template <typename... Args>
+void console_log( const char *fmt, Args &&...args ) {
+    if constexpr ( sizeof...( args ) > 0 ) {
+        std::fprintf( stderr, fmt, std::forward<Args>( args )... );
+    }
+    else {
+        std::fprintf( stderr, "%s", fmt );
+    }
+    std::fprintf( stderr, "\n" );
+}
+
+#define CONSOLE_LOG( ... ) console_log( __VA_ARGS__ )
+#define UNUSE( x )         (void)x;
 
 namespace fs = std::filesystem;
 
@@ -170,6 +181,10 @@ BreakpadHandler &BreakpadHandler::Instance() {
 }
 
 void BreakpadHandler::Init() {
+    if ( d->dump_root_path.empty() || d->dump_path.empty() ) {
+        CONSOLE_LOG( "Error: dump path is empty, init breakpad handle failed" );
+        return;
+    }
     CleanEmptyDir( d->dump_root_path );
     d->CreateDumpDir();
     CONSOLE_LOG( "Set dump path: %s", d->dump_path.c_str() );
@@ -189,7 +204,7 @@ void BreakpadHandler::Init() {
 void BreakpadHandler::SetDumpRootPath( const std::string &path, bool git_hash_as_dump_path ) {
     fs::path abs_path;
     try {
-        if ( git_hash_as_dump_path && !std::string().empty() ) {
+        if ( git_hash_as_dump_path && !path.empty() ) {
             abs_path = FileUtil::JoinPaths( fs::absolute( path ), std::string( GitHash::shortSha1 ) );
         }
         else {
