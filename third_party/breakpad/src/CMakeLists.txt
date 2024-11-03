@@ -34,6 +34,9 @@ if (UNIX)
 endif()
 add_library(${COMMON_LIB} STATIC ${COMMON_SRC})
 target_include_directories(${COMMON_LIB} PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+if (UNIX)
+    target_link_libraries(${COMMON_LIB} PRIVATE pthread)
+endif()
 
 # client
 file(GLOB_RECURSE CLIENT_SRC
