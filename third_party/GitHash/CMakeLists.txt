@@ -18,7 +18,7 @@ set(CMD_GIT_COMMIT_DATE ${GIT_EXECUTABLE} log -1 --format=%ad --date=format:"%Y%
 set(CMD_GIT_DIRTY       ${GIT_EXECUTABLE} describe --always --dirty) # we post-process this one
 
 # Generator of the .cpp of the githash library
-function(genCppContents outputString)
+function(GenCppContents outputString)
     set(${outputString}
 "namespace GitHash {
     extern const char * const branch;
@@ -37,7 +37,7 @@ function(genCppContents outputString)
 endfunction()
 
 # Cache format (which, if changed, triggers a regeneration of the .cpp)
-function(genCache outputString)
+function(GenCache outputString)
     set(${outputString} "${GIT_SHA1}-${GIT_DIRTY}" PARENT_SCOPE)
 endfunction()
 
@@ -63,6 +63,9 @@ if (NOT DEFINED GitHash_SourceDir)
     set(GitHash_SourceDir "${CMAKE_SOURCE_DIR}")
 endif()
 
+# Output library name to the other CMakeLists.txt
+set(GITHASH_LIBRARIES githash CACHE STRING "Name of githash library" FORCE)
+
 function(SetupGitHash)
     # Run this script when building. Note how we pass all variables we need, since we will not get them automatically
     # and even the CMake source dir might be wrong (if for example the build folder is outside the original path)
@@ -77,13 +80,10 @@ function(SetupGitHash)
     )
 
     # Create library for user
-    add_library(githash ${GitHash_CppFile})
-    target_include_directories(githash PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include")
-    target_sources(githash PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include/GitHash.hpp")
-    add_dependencies(githash CheckGitHash)
-
-    # Output library name to the other CMakeLists.txt
-    set(GITHASH_LIBRARIES githash CACHE STRING "Name of githash library" FORCE)
+    add_library(${GITHASH_LIBRARIES} ${GitHash_CppFile})
+    target_include_directories(${GITHASH_LIBRARIES} PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include")
+    target_sources(${GITHASH_LIBRARIES} PUBLIC "${CMAKE_CURRENT_LIST_DIR}/include/GitHash.hpp")
+    add_dependencies(${GITHASH_LIBRARIES} CheckGitHash)
 
     UpdateGitHash()
 endfunction()
@@ -119,14 +119,14 @@ function(UpdateGitHash)
     endif()
 
     # Generate new contents for the cache.
-    genCache(newSha1Cache)
+    GenCache(newSha1Cache)
 
     # Always update the GitHash.cpp file
     # Set the cache so we can skip rebuilding if nothing changed.
     file(WRITE ${GitHash_CacheFile} ${newSha1Cache})
 
     # Get the CPP file contents with all variables correctly embedded.
-    genCppContents(outputString)
+    GenCppContents(outputString)
 
     # Finally output our new library cpp file.
     file(WRITE ${GitHash_CppFile} "${outputString}")

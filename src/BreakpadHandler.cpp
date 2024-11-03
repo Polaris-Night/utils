@@ -68,9 +68,9 @@ std::vector<fs::path> ForeachDir( const fs::path &root_path, const std::string &
     dir_stack.push( root_path );
     try {
         while ( !dir_stack.empty() ) {
-            fs::path currentPath = dir_stack.top();
+            fs::path current_path = dir_stack.top();
             dir_stack.pop();
-            for ( const auto &entry : fs::directory_iterator( currentPath ) ) {
+            for ( const auto &entry : fs::directory_iterator( current_path ) ) {
                 if ( entry.is_directory() ) {
                     dir_stack.push( entry.path() );
                 }

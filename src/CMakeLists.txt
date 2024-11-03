@@ -1,7 +1,7 @@
 set(UTILS_INCLUDES_DIR ${CMAKE_CURRENT_LIST_DIR} CACHE STRING "${UTILS_INCLUDES_DIR}" FORCE)
 file(GLOB UTILS_SRC ${CMAKE_CURRENT_LIST_DIR}/*.cpp ${CMAKE_CURRENT_LIST_DIR}/*.h)
 add_library(${PROJECT_NAME} STATIC ${UTILS_SRC})
-target_link_libraries(${PROJECT_NAME} PRIVATE breakpad_client githash)
+target_link_libraries(${PROJECT_NAME} PRIVATE breakpad_client ${GITHASH_LIBRARIES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${UTILS_INCLUDES_DIR} PRIVATE ${BREAKPAD_INCLUDE_DIRS})
 
 set_target_properties(

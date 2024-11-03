@@ -63,7 +63,7 @@ public:
      * @param container 字符串容器
      * @return std::string
      */
-    template <template <class...> class Container>
+    template <template <class> class Container>
     static std::string Join( const std::string &separator, const Container<std::string> &container ) {
         std::string result;
         auto        iter = std::cbegin( container );

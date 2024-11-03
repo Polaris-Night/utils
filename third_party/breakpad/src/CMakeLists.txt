@@ -128,6 +128,52 @@ add_executable(minidump_stackwalk ${MINUDUMP_STACKWALK_SRC})
 target_link_libraries(minidump_stackwalk PRIVATE ${COMMON_LIB} disasm)
 target_include_directories(minidump_stackwalk PUBLIC ${CMAKE_CURRENT_LIST_DIR})
 
+# minidump module reader
+set(MINIDUMP_MODULE_READER_SRC
+    ${CMAKE_CURRENT_LIST_DIR}/processor/minidump_module_reader.cc
+    ${CMAKE_CURRENT_LIST_DIR}/common/path_helper.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/basic_code_modules.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/basic_source_line_resolver.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/call_stack.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/cfi_frame_info.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/convert_old_arm64_context.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/disassembler_x86.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/dump_context.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/dump_object.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/exploitability.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/exploitability_linux.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/exploitability_win.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/logging.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/minidump.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/minidump_processor.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/pathname_stripper.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/process_state.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/proc_maps_linux.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/simple_symbol_supplier.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/source_line_resolver_base.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stack_frame_cpu.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stack_frame_symbolizer.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalk_common.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_address_list.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_amd64.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_arm.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_arm64.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_mips.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_ppc.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_ppc64.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_riscv.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_riscv64.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_sparc.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/stackwalker_x86.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/symbolic_constants_win.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/tokenize.cc
+    ${CMAKE_CURRENT_LIST_DIR}/processor/disassembler_objdump.cc
+)
+add_executable(minidump_module_reader ${MINIDUMP_MODULE_READER_SRC})
+target_link_libraries(minidump_module_reader PRIVATE ${COMMON_LIB} disasm)
+target_include_directories(minidump_module_reader PUBLIC ${CMAKE_CURRENT_LIST_DIR})
+
 install(
     TARGETS ${CLIENT_LIB}
     ARCHIVE DESTINATION lib
