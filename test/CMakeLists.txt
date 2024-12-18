@@ -1,10 +1,6 @@
 add_subdirectory(googletest)
 
-set(TEST_SRC
-    test_stringutil.cpp
-    test_compare.cpp
-    CACHE INTERNAL "" FORCE
-)
+file(GLOB TEST_SRC ${CMAKE_CURRENT_LIST_DIR}/test_*.cpp)
 
 add_executable(main main.cpp ${TEST_SRC})
 target_link_libraries(main PRIVATE utils gtest)
