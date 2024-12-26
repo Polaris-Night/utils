@@ -78,3 +78,9 @@ TEST( ConsumableOptionalTest, BoolOperator_NoValue ) {
     ConsumableOptional<int> co;
     EXPECT_FALSE( static_cast<bool>( co ) );
 }
+
+TEST( ConsumableOptionalTest, Reset ) {
+    ConsumableOptional<int> co( 30 );
+    co.reset();
+    EXPECT_FALSE( static_cast<bool>( co ) );
+}

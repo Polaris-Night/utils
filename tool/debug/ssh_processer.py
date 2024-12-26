@@ -5,6 +5,30 @@ import select
 from common_utils import md5_file, ProgressBar
 
 
+class SFTPObject:
+    def __init__(self, hostname, port, username, password):
+        self.hostname = hostname
+        self.port = port
+        self.username = username
+        self.password = password
+
+    def __enter__(self):
+        self.ssh = paramiko.SSHClient()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect(
+            hostname=self.hostname,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+        )
+        self.sftp = self.ssh.open_sftp()
+        return self.sftp
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.sftp.close()
+        self.ssh.close()
+
+
 class SSHProcessor:
     def __init__(self, hostname, port, username, password):
         self.hostname = hostname

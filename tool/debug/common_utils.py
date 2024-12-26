@@ -75,19 +75,21 @@ def mkdir_is_not_exists(path: str):
         os.makedirs(path, exist_ok=True)
 
 
-def rm_file_or_dir(path: Path):
-    if path.is_dir():
-        shutil.rmtree(path)
-    if path.is_file():
-        path.unlink()
+def rm_file_or_dir(path):
+    if not isinstance(path, Path):
+        _path = Path(path)
+    else:
+        _path = path
+    if _path.is_dir():
+        shutil.rmtree(_path)
+    if _path.is_file():
+        _path.unlink()
 
 
 def run_command(command, check=True, **kwargs):
     """执行命令，并返回运行结果"""
     try:
-        result = subprocess.run(
-            command, check=check, shell=True, capture_output=True, text=True, **kwargs
-        )
+        result = subprocess.run(command, check=check, shell=True, text=True, **kwargs)
         logging.info("Command executed successfully: %s", command)
         return result
     except subprocess.CalledProcessError as e:
