@@ -15,5 +15,3 @@ build_breakpad(${CMAKE_SOURCE_DIR}/third_party/breakpad)
 add_subdirectory(third_party)
 add_subdirectory(src)
 add_subdirectory(test)
-
-set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR}/install CACHE STRING "${CMAKE_INSTALL_PREFIX}" FORCE)

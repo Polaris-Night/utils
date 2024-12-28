@@ -70,7 +70,7 @@ class AtomicCounter:
             return self._value
 
 
-def mkdir_is_not_exists(path: str):
+def mkdir_if_not_exists(path: str):
     if not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
 
@@ -86,17 +86,24 @@ def rm_file_or_dir(path):
         _path.unlink()
 
 
-def run_command(command, check=True, **kwargs):
+def run_command(command, capture_output=True, check=True, **kwargs):
     """执行命令，并返回运行结果"""
     try:
-        result = subprocess.run(command, check=check, shell=True, text=True, **kwargs)
-        logging.info("Command executed successfully: %s", command)
+        print(f"Execute command: {command}")
+        result = subprocess.run(
+            command,
+            check=check,
+            capture_output=capture_output,
+            shell=True,
+            text=True,
+            **kwargs,
+        )
         return result
     except subprocess.CalledProcessError as e:
-        logging.error("Command failed: %s\nOutput: %s", command, e.stderr)
+        print(f"Command failed: {command}, Error: {e.stderr}")
         raise e
     except Exception as e:
-        logging.error("Command failed: %s\nError: %s", command, e)
+        print(f"Command failed: {command}, Error: {e}")
         raise e
 
 

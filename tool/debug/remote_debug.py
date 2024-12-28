@@ -1,5 +1,5 @@
 import os
-from ssh_processer import SSHProcessor
+from ssh_processor import SSHProcessor
 from vscode_parser import *
 
 
