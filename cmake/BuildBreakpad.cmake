@@ -187,10 +187,7 @@ macro(build_breakpad BREAKPAD_ROOT_DIR)
     target_link_libraries(minidump_module_reader PRIVATE breakpad_common disasm)
     target_include_directories(minidump_module_reader PUBLIC ${BREAKPAD_SRC_DIR})
 
-    install(
-        TARGETS breakpad_client
-        ARCHIVE DESTINATION lib
-    )
+    install(TARGETS breakpad_client dump_syms minidump_stackwalk minidump_module_reader)
 
     install(
         DIRECTORY

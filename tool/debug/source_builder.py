@@ -75,7 +75,7 @@ class CMakeBuilder(AbstractBuilder):
             cmake_cmd.extend(f"-D{arg}" for arg in self.param.cmake_cache_args)
         if self.param.custom_args:
             cmake_cmd.extend(self.param.custom_args)
-        run_command(" ".join(cmake_cmd), capture_output=False)
+        run_command(" ".join(cmake_cmd), capture_output=False, echo_command=True)
 
     def build(self):
         target = (
@@ -84,11 +84,11 @@ class CMakeBuilder(AbstractBuilder):
             else self.param.build_target
         )
         build_cmd = f"cmake --build {self.param.build_path} --target {target} -j{self.param.build_jobs}"
-        run_command(build_cmd, capture_output=False)
+        run_command(build_cmd, capture_output=False, echo_command=True)
 
     def install(self):
-        install_cmd = f"cmake --install {self.param.build_path}"
-        run_command(install_cmd, capture_output=False)
+        install_cmd = f"cmake --install {self.param.build_path} --strip"
+        run_command(install_cmd, capture_output=False, echo_command=True)
 
     def clean(self):
         rm_file_or_dir(os.path.join(self.param.build_path, "CMakeCache.txt"))

@@ -1,17 +1,27 @@
-# utils.py
-
 import os
 import sys
-import logging
 import subprocess
 import time
 import hashlib
 import threading
 import json
-from pathlib import Path
-from dataclasses import dataclass, fields, is_dataclass
 import shutil
 import re
+import abc
+from pathlib import Path
+from dataclasses import dataclass, fields, is_dataclass
+from weakref import WeakValueDictionary
+
+
+def singleton(cls):
+    instances = {}
+
+    def get_instance(*args, **kwargs):
+        if cls not in instances:
+            instances[cls] = cls(*args, **kwargs)
+        return instances[cls]
+
+    return get_instance
 
 
 class ElapsedTimer:
@@ -30,44 +40,123 @@ class ElapsedTimer:
         print(f"{self.title}耗时：{minutes:02d}:{seconds:02d}.{millisecond:03d}")
 
 
-class ProgressBar:
-    def __init__(self, total, title="", length=40):
-        self.total = total
-        self.title = title
-        self.length = length
+class AbstractProgressBar(abc.ABC):
+    clear_line = "\033[K"
+    up_line = "\033[F"
+
+    def __init__(self, title: str, width: int):
+        self.title = AbstractProgressBar.pure_str(title)
+        self.width = width
         self.start_time = time.time()
+        self.elapsed_time = 0
+        self.remaining_time = 0
+        self.__lock = threading.Lock()
 
+    @property
+    def lock(self):
+        return self.__lock
+
+    @abc.abstractmethod
     def update(self, progress):
-        elapsed_time = time.time() - self.start_time
-        remaining_time = (
-            (elapsed_time / progress) * (self.total - progress) if progress > 0 else 0
-        )
-        percent = (progress / self.total) * 100
-        bar_length = int(self.length * progress // self.total)
-        bar = "█" * bar_length + "-" * (self.length - bar_length)
+        pass
 
-        sys.stdout.write(
-            f"\r{self.title} |{bar}| {percent:.2f}% | Elapsed: {elapsed_time:.2f}s | Remaining: {remaining_time:.2f}s"
-        )
-        sys.stdout.flush()
-
-    def finish(self):
+    @staticmethod
+    def flush():
         sys.stdout.write("\n")
         sys.stdout.flush()
 
+    @staticmethod
+    def pure_str(s):
+        """删除掉字符串中的\r \n \t以避免进度显示异常"""
+        return re.sub(pattern=r"[\r\t\n]", repl="", string=s)
+
+
+class LineProgressBar(AbstractProgressBar):
+    def __init__(self, total: int = 100, title: str = "", width: int = 40):
+        """
+        @param total : 进度总值
+        @param width : 进度条长度
+        @param title : 进度条标题
+        """
+        super().__init__(title=title, width=width)
+        self.total = total
+        self.progress = 0
+
+    def update(self, progress: int):
+        """
+        @param progress : 当前进度值
+        """
+        with self.lock:
+            if progress > 0:
+                self.progress = progress
+                self.elapsed_time = time.time() - self.start_time
+                self.remaining_time = (
+                    (self.elapsed_time / self.progress) * (self.total - self.progress)
+                    if self.progress > 0
+                    else 0
+                )
+            percent = (self.progress / self.total) * 100
+            bar_length = int(self.width * self.progress // self.total)
+            bar = "#" * bar_length + "-" * (self.width - bar_length)
+            sys.stdout.write("\r" + self.clear_line)
+            sys.stdout.write(
+                f"\r{self.title} | {bar} | {percent: .2f}% | Elapsed: {self.elapsed_time:.2f}s |  Remaining: {self.remaining_time:.2f}s"
+            )
+
+
+@singleton
+class ProgressBarHelper:
+    def __init__(self):
+        self.__bar_dict: WeakValueDictionary[str, AbstractProgressBar] = (
+            WeakValueDictionary()
+        )
+        self.__lock = threading.Lock()
+
+    def put(self, key, bar: AbstractProgressBar):
+        if not isinstance(bar, AbstractProgressBar):
+            raise TypeError("progress_bar must be an instance of AbstractProgressBar")
+        with self.__lock:
+            if key and bar:
+                self.__bar_dict[key] = bar
+
+    def clear(self):
+        with self.__lock:
+            self.__bar_dict.clear()
+
+    def count(self):
+        with self.__lock:
+            return len(self.__bar_dict)
+
+    def update(self, key, progress):
+        """
+        @param key : 进度条键
+        @param progress : 进度值
+        """
+        if not key:
+            return
+        with self.__lock:
+            lines = len(self.__bar_dict)
+            sys.stdout.write(AbstractProgressBar.up_line * lines if lines > 0 else "")
+            for bar_key, bar in self.__bar_dict.items():
+                if bar_key == key:
+                    bar.update(progress)
+                else:
+                    bar.update(0)
+                AbstractProgressBar.flush()
+
 
 class AtomicCounter:
-    def __init__(self):
-        self._value = 0
-        self._lock = threading.Lock()
+    def __init__(self, initial_value: int = 0):
+        self.__value = initial_value
+        self.__lock = threading.Lock()
 
     def add_value(self, value):
-        with self._lock:
-            self._value += value
+        with self.__lock:
+            self.__value += value
 
     def get_value(self):
-        with self._lock:
-            return self._value
+        with self.__lock:
+            return self.__value
 
 
 def mkdir_if_not_exists(path: str):
@@ -86,10 +175,11 @@ def rm_file_or_dir(path):
         _path.unlink()
 
 
-def run_command(command, capture_output=True, check=True, **kwargs):
+def run_command(command, capture_output=True, check=True, echo_command=False, **kwargs):
     """执行命令，并返回运行结果"""
     try:
-        print(f"Execute command: {command}")
+        if echo_command:
+            print(f"Execute command: {command}")
         result = subprocess.run(
             command,
             check=check,
