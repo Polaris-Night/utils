@@ -10,10 +10,14 @@ import re
 import abc
 from pathlib import Path
 from dataclasses import dataclass, fields, is_dataclass
+from functools import wraps
 from weakref import WeakValueDictionary
 
 
 def singleton(cls):
+    """
+    单例类装饰器
+    """
     instances = {}
 
     def get_instance(*args, **kwargs):
@@ -22,6 +26,32 @@ def singleton(cls):
         return instances[cls]
 
     return get_instance
+
+
+def throttle(interval, condition=None):
+    """
+    节流函数装饰器，用于限制函数的调用频率，并支持自定义条件
+    :param interval: 最小调用间隔时间（秒）
+    :param condition: 自定义条件函数，返回 True 时允许调用
+    """
+
+    def decorator(func):
+        last_call_time = [
+            0
+        ]  # 使用列表来保存状态，以便在闭包中修改，或在wrapper内使用nonlocal声明
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            current_time = time.time()
+            if (current_time - last_call_time[0] >= interval) or (
+                condition and condition(*args, **kwargs)
+            ):
+                last_call_time[0] = current_time
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 class ElapsedTimer:

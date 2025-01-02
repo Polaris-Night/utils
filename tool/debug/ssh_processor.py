@@ -2,8 +2,9 @@ import paramiko
 import os
 import time
 import select
+import socket
 from threading import Lock
-from common_utils import md5_file, LineProgressBar, ProgressBarHelper
+from common_utils import throttle, md5_file, LineProgressBar, ProgressBarHelper
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 
@@ -128,15 +129,14 @@ class SSHProcessor:
         ssh_object = self.ssh_pool.get_connection()
         try:
             with ssh_object as (ssh, sftp):
+                # 设置超时时间，传输有可能阻塞不动
+                sftp.sock.settimeout(10)
                 # 确保远程目录存在
-                remote_dir = os.path.dirname(remote_file)
-                self.create_remote_dir(remote_dir, sftp=sftp)
+                self.create_remote_dir(os.path.dirname(remote_file), sftp=sftp)
                 # # 计算本地文件的MD5值
                 local_md5 = md5_file(local_file)
-
                 # 获取远程文件的MD5值
                 remote_md5 = self.get_remote_md5(remote_file, ssh=ssh)
-
                 # 比较MD5值
                 if remote_md5 is None or local_md5 != remote_md5:
                     progress_bar = LineProgressBar(
@@ -144,16 +144,16 @@ class SSHProcessor:
                         title=os.path.basename(local_file),
                     )
                     self.progress_helper.put(local_md5, progress_bar)
-                    last_update_time = time.time()
 
+                    @throttle(
+                        1, condition=lambda transferred, total: transferred >= total
+                    )
                     def progress_callback(transferred, total):
-                        nonlocal last_update_time
-                        current_time = time.time()
-                        if current_time - last_update_time >= 1 or transferred >= total:
-                            self.progress_helper.update(local_md5, transferred)
-                            last_update_time = current_time
+                        self.progress_helper.update(local_md5, transferred)
 
                     sftp.put(local_file, remote_file, callback=progress_callback)
+        except socket.timeout:
+            print(f"Timeout occurred while transferring {local_file} to {remote_file}")
         except Exception as e:
             print(f"Error transferring {local_file} to {remote_file}: {e}")
         finally:
@@ -196,7 +196,7 @@ class SSHProcessor:
                 if channel in rlist:
                     if channel.recv_ready():
                         resp = channel.recv(1024)
-                        content = resp.decode("utf-8")
+                        content = resp.decode("utf-8", errors="replace")
                         if content:
                             print(content, end="")
                     if channel.exit_status_ready():
