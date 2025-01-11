@@ -124,40 +124,50 @@ class SSHProcessor:
             with self.__lock:
                 create_dir(self.client.sftp)
 
-    def transfer_file(self, local_file, remote_file):
+    def transfer_file(self, local_file, remote_file, timeout_retries: int = 3):
         """传输单个文件并检查MD5值"""
         ssh_object = self.ssh_pool.get_connection()
-        try:
-            with ssh_object as (ssh, sftp):
-                # 设置超时时间，传输有可能阻塞不动
-                sftp.sock.settimeout(10)
-                # 确保远程目录存在
-                self.create_remote_dir(os.path.dirname(remote_file), sftp=sftp)
-                # # 计算本地文件的MD5值
-                local_md5 = md5_file(local_file)
-                # 获取远程文件的MD5值
-                remote_md5 = self.get_remote_md5(remote_file, ssh=ssh)
-                # 比较MD5值
-                if remote_md5 is None or local_md5 != remote_md5:
-                    progress_bar = LineProgressBar(
-                        total=os.path.getsize(local_file),
-                        title=os.path.basename(local_file),
-                    )
-                    self.progress_helper.put(local_md5, progress_bar)
+        while timeout_retries > 0:
+            try:
+                with ssh_object as (ssh, sftp):
+                    # 设置超时时间，传输有可能阻塞不动
+                    sftp.sock.settimeout(3)
+                    # 确保远程目录存在
+                    self.create_remote_dir(os.path.dirname(remote_file), sftp=sftp)
+                    # # 计算本地文件的MD5值
+                    local_md5 = md5_file(local_file)
+                    # 获取远程文件的MD5值
+                    remote_md5 = self.get_remote_md5(remote_file, ssh=ssh)
+                    # 比较MD5值
+                    if remote_md5 is None or local_md5 != remote_md5:
+                        progress_bar = LineProgressBar(
+                            total=os.path.getsize(local_file),
+                            title=os.path.basename(local_file),
+                        )
+                        self.progress_helper.put(local_md5, progress_bar)
 
-                    @throttle(
-                        1, condition=lambda transferred, total: transferred >= total
-                    )
-                    def progress_callback(transferred, total):
-                        self.progress_helper.update(local_md5, transferred)
+                        @throttle(
+                            1, condition=lambda transferred, total: transferred >= total
+                        )
+                        def progress_callback(transferred, total):
+                            self.progress_helper.update(local_md5, transferred)
 
-                    sftp.put(local_file, remote_file, callback=progress_callback)
-        except socket.timeout:
-            print(f"Timeout occurred while transferring {local_file} to {remote_file}")
-        except Exception as e:
-            print(f"Error transferring {local_file} to {remote_file}: {e}")
-        finally:
-            self.ssh_pool.release_connection(ssh_object)
+                        sftp.put(local_file, remote_file, callback=progress_callback)
+                    break
+            except socket.timeout:
+                print(
+                    f"Timeout occurred while transferring {local_file} to {remote_file}"
+                )
+                timeout_retries -= 1
+                if timeout_retries > 0:
+                    print("Retrying...")
+                else:
+                    print("Max retries exceeded, aborting.")
+                    break
+            except Exception as e:
+                print(f"Error transferring {local_file} to {remote_file}: {e}")
+                break
+        self.ssh_pool.release_connection(ssh_object)
 
     def transfer_directory(self, local_path, remote_path):
         """传输文件夹及其内容"""
