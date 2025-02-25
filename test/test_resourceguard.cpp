@@ -69,3 +69,32 @@ TEST( ResourceGuardTest, GetAndRelease ) {
     delete released_resource;
     EXPECT_EQ( count, 0 );
 }
+
+TEST( ResourceGuardTest, NullResource ) {
+    int count = 0;
+    EXPECT_THROW( { ResourceGuard<TestResource> guard( nullptr, TestResourceDeleter ); }, std::runtime_error );
+    EXPECT_EQ( count, 0 );
+}
+
+TEST( ResourceGuardTest, NullDeleter ) {
+    int           count    = 0;
+    TestResource *resource = new TestResource( &count );
+    EXPECT_THROW( { ResourceGuard<TestResource> guard( resource, nullptr ); }, std::runtime_error );
+    delete resource;
+    EXPECT_EQ( count, 0 );
+}
+
+TEST( ResourceGuardTest, UncheckNull ) {
+    using GuardType = ResourceGuard<TestResource>;
+    EXPECT_NO_THROW( { GuardType guard( nullptr, GuardType::Deleter{}, false ); } );
+}
+
+TEST( ResourceGuardTest, Reset ) {
+    int                         count = 0;
+    ResourceGuard<TestResource> guard( new TestResource( &count ), TestResourceDeleter );
+    EXPECT_EQ( count, 1 );
+    EXPECT_NE( guard.Get(), nullptr );
+    guard.Reset();
+    EXPECT_EQ( count, 0 );
+    EXPECT_EQ( guard.Get(), nullptr );
+}
