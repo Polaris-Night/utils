@@ -2,6 +2,7 @@ import json
 import os
 from dataclasses import dataclass
 from common_utils import object_from_json, json_remove_comments, find_from_list
+from typing import List
 
 """
 tasks.json
@@ -124,19 +125,19 @@ class LaunchObject:
     type: str = None
     request: str = None
     program: str = None
-    args: list = None
+    args: List = None
     cwd: str = None
-    environment: list = None
+    environment: List = None
     MIMode: str = None
     miDebuggerArgs: str = None
     miDebuggerPath: str = None
     miDebuggerServerAddress: str = None
     preLaunchTask: str = None
-    setupCommands: list = None
+    setupCommands: List = None
 
 
 class LaunchParser:
-    launch_list: list[LaunchObject] = []
+    launch_list: List[LaunchObject] = []
 
     def __init__(self):
         self.config = self.read_launch_json()

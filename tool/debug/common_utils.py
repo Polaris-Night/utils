@@ -8,10 +8,11 @@ import json
 import shutil
 import re
 import abc
-from pathlib import Path
-from dataclasses import dataclass, fields, is_dataclass
 from functools import wraps
+from pathlib import Path
+from dataclasses import fields, is_dataclass
 from weakref import WeakValueDictionary
+from typing import Callable, Union
 
 
 def singleton(cls):
@@ -30,15 +31,14 @@ def singleton(cls):
 
 def throttle(interval, condition=None):
     """
-    节流函数装饰器，用于限制函数的调用频率，并支持自定义条件
-    :param interval: 最小调用间隔时间（秒）
-    :param condition: 自定义条件函数，返回 True 时允许调用
+    装饰器，用于限制函数的调用频率，并支持自定义条件
+    Args:
+        interval: 最小调用间隔时间（秒）
+        condition: 自定义条件函数，返回 True 时允许调用
     """
 
     def decorator(func):
-        last_call_time = [
-            0
-        ]  # 使用列表来保存状态，以便在闭包中修改，或在wrapper内使用nonlocal声明
+        last_call_time = [0]  # 使用列表来保存状态，以便在闭包中修改
 
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -55,19 +55,93 @@ def throttle(interval, condition=None):
 
 
 class ElapsedTimer:
-    def __init__(self, title=""):
+    def __init__(
+        self, title: str = "Elapsed time", clock: Union[str, Callable] = "monotonic"
+    ):
+        """初始化计时器
+
+        Args:
+            title: 计时器标题，用于打印输出
+            clock: 时钟源，可以是字符串"monotonic"、"time"或自定义的时间函数
+        """
         self.title = title
 
+        if clock == "monotonic":
+            self._time_func = time.monotonic
+        elif clock == "time":
+            self._time_func = time.time
+        elif callable(clock):
+            self._time_func = clock
+        else:
+            raise ValueError("clock must be 'monotonic', 'time' or a callable")
+
+        self._start_time = 0
+
     def __enter__(self):
-        self.start_time = time.time()
+        """进入上下文管理器，开始计时
+
+        Returns:
+            ElapsedTimer: 返回当前实例
+        """
+        self.start()
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        end_time = time.time()
-        execution_time = end_time - self.start_time
+        """退出上下文管理器，结束计时并打印执行时间
+
+        Args:
+            exc_type: 异常类型
+            exc_val: 异常值
+            exc_tb: 异常回溯信息
+        """
+        end_time = self._time_func()
+        execution_time = end_time - self._start_time
         minutes = int(execution_time // 60)
         seconds = int(execution_time % 60)
         millisecond = int((execution_time - seconds) * 1000)
-        print(f"{self.title}耗时：{minutes:02d}:{seconds:02d}.{millisecond:03d}")
+        print(f"{self.title}: {minutes:02d}:{seconds:02d}.{millisecond:03d}")
+
+    def __call__(self, func):
+        """使ElapsedTimer可以作为装饰器使用
+
+        Args:
+            func: 被装饰的函数
+
+        Returns:
+            function: 包装后的函数
+        """
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with self:
+                return func(*args, **kwargs)
+
+        return wrapper
+
+    def start(self):
+        """开始计时"""
+        self._start_time = self._time_func()
+
+    def elapsed(self):
+        """返回自start()调用以来经过的毫秒数
+
+        Returns:
+            int: 经过的毫秒数，如果尚未开始计时则返回0
+        """
+        if self._start_time == 0:
+            return 0
+        return int((self._time_func() - self._start_time) * 1000)
+
+    def has_expired(self, timeout: int):
+        """检查是否已超过指定的超时时间
+
+        Args:
+            timeout: 超时时间(毫秒)
+
+        Returns:
+            bool: 如果已超过指定的超时时间返回True，否则返回False
+        """
+        return self.elapsed() >= timeout
 
 
 class AbstractProgressBar(abc.ABC):
@@ -104,9 +178,10 @@ class AbstractProgressBar(abc.ABC):
 class LineProgressBar(AbstractProgressBar):
     def __init__(self, total: int = 100, title: str = "", width: int = 40):
         """
-        @param total : 进度总值
-        @param width : 进度条长度
-        @param title : 进度条标题
+        Args:
+            total: 进度总值
+            width: 进度条长度
+            title: 进度条标题
         """
         super().__init__(title=title, width=width)
         self.total = total
@@ -114,7 +189,8 @@ class LineProgressBar(AbstractProgressBar):
 
     def update(self, progress: int):
         """
-        @param progress : 当前进度值
+        Args:
+            progress: 当前进度值
         """
         with self.lock:
             if progress > 0:
@@ -159,8 +235,9 @@ class ProgressBarHelper:
 
     def update(self, key, progress):
         """
-        @param key : 进度条键
-        @param progress : 进度值
+        Args:
+            key: 进度条键
+            progress: 进度值
         """
         if not key:
             return
@@ -220,11 +297,9 @@ def run_command(command, capture_output=True, check=True, echo_command=False, **
         )
         return result
     except subprocess.CalledProcessError as e:
-        print(f"Command failed: {command}, Error: {e.stderr}")
-        raise e
+        raise RuntimeError(f"Command failed: {command}, Error: {e.stderr}") from e
     except Exception as e:
-        print(f"Command failed: {command}, Error: {e}")
-        raise e
+        raise RuntimeError(f"Command failed: {command}, Error: {e}") from e
 
 
 def md5_file(filepath):
@@ -246,9 +321,11 @@ def object_from_json(json_data, data_class):
     """
     从 JSON 字符串或字典对象转换为指定的数据类对象。
 
-    :param json_data: JSON 字符串或字典对象
-    :param data_class: 目标数据类
-    :return: 数据类对象
+    Args:
+        json_data: JSON 字符串或字典对象
+        data_class: 目标数据类
+    Returns:
+        数据类对象
     """
     if not is_dataclass(data_class):
         raise ValueError("提供的类必须是数据类")
@@ -273,10 +350,12 @@ def find_from_list(lst, key, value):
     """
     从列表中根据字典的键值对查找字典。
 
-    :param lst: 包含字典的列表
-    :param key: 字典的键（字符串）
-    :param value: 键对应的值
-    :return: 匹配的字典或 None
+    Args:
+        lst: 包含字典的列表
+        key: 字典的键（字符串）
+        value: 键对应的值
+    Returns:
+        匹配的字典或None
     """
     try:
         # 使用 next 函数查找

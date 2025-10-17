@@ -1,12 +1,12 @@
 import paramiko
 import os
-import time
 import select
 import socket
 from threading import Lock
 from common_utils import throttle, md5_file, LineProgressBar, ProgressBarHelper
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
+from typing import Tuple
 
 
 class SSHObject:
@@ -21,7 +21,7 @@ class SSHObject:
     def __del__(self):
         self.close()
 
-    def __enter__(self) -> tuple[paramiko.SSHClient, paramiko.SFTPClient]:
+    def __enter__(self) -> Tuple[paramiko.SSHClient, paramiko.SFTPClient]:
         self.connect()
         return self.ssh, self.sftp
 
@@ -37,6 +37,7 @@ class SSHObject:
             username=self.username,
             password=self.password,
         )
+        self.ssh.get_transport().set_keepalive(15)  # 设置心跳，避免传输大文件时容易超时
         self.sftp = self.ssh.open_sftp()
 
     def close(self):
@@ -64,6 +65,61 @@ class SSHConnectionPool:
 
     def release_connection(self, object: SSHObject):
         self.pool.put(object)
+
+
+def sftp_put_resume(
+    sftp: paramiko.SFTPClient,
+    local_file: str,
+    remote_file: str,
+    progress_callback=None,
+    overwrite: bool = False,
+):
+    """
+    支持断点续传或强制覆盖的SFTP上传方法
+
+    Args:
+        sftp: paramiko.SFTPClient 实例
+        local_file: 本地文件路径
+        remote_file: 远程文件路径
+        progress_callback: 回调函数，用于显示进度
+        overwrite: 是否覆盖远程文件（True 表示覆盖）
+    """
+    total_size = os.path.getsize(local_file)
+    remote_size = 0
+
+    if not overwrite:
+        # 非覆盖模式才检查断点
+        try:
+            remote_size = sftp.stat(remote_file).st_size
+            if remote_size >= total_size:
+                print(f"{local_file} 已完整上传.")
+                return
+            print(
+                f"Resuming upload of {local_file} from {remote_size}/{total_size} bytes"
+            )
+        except FileNotFoundError:
+            remote_size = 0
+    else:
+        # 覆盖模式：删除远程文件
+        try:
+            sftp.remove(remote_file)
+        except FileNotFoundError:
+            pass  # 文件不存在无需删除
+        remote_size = 0
+
+    block_size = 65536  # 64KB
+    with open(local_file, "rb") as fl:
+        fl.seek(remote_size)
+
+        with sftp.file(remote_file, "ab" if not overwrite else "wb") as fr:
+            while True:
+                data = fl.read(block_size)
+                if not data:
+                    break
+                fr.write(data)
+                if progress_callback:
+                    remote_size += len(data)
+                    progress_callback(remote_size, total_size)
 
 
 class SSHProcessor:
@@ -124,14 +180,16 @@ class SSHProcessor:
             with self.__lock:
                 create_dir(self.client.sftp)
 
-    def transfer_file(self, local_file, remote_file, timeout_retries: int = 3):
+    def transfer_file(self, local_file, remote_file):
         """传输单个文件并检查MD5值"""
         ssh_object = self.ssh_pool.get_connection()
-        while timeout_retries > 0:
+        max_retries = 3  # 因超时重试的最大次数
+        start_time = 0.0  # 缓存开始时间，用于断点续传时进度条正确统计
+        while max_retries > 0:
             try:
                 with ssh_object as (ssh, sftp):
-                    # 设置超时时间，传输有可能阻塞不动
-                    sftp.sock.settimeout(3)
+                    # 设置超时时间，传输卡住不动后会超时
+                    sftp.sock.settimeout(7)
                     # 确保远程目录存在
                     self.create_remote_dir(os.path.dirname(remote_file), sftp=sftp)
                     # # 计算本地文件的MD5值
@@ -152,17 +210,31 @@ class SSHProcessor:
                         def progress_callback(transferred, total):
                             self.progress_helper.update(local_md5, transferred)
 
-                        sftp.put(local_file, remote_file, callback=progress_callback)
+                        if max_retries == 3:
+                            start_time = progress_bar.start_time
+                            sftp.put(
+                                local_file, remote_file, callback=progress_callback
+                            )
+                        else:
+                            progress_bar.start_time = start_time
+                            # 使用断点续传上传文件
+                            sftp_put_resume(
+                                sftp,
+                                local_file,
+                                remote_file,
+                                progress_callback=progress_callback,
+                                overwrite=False,
+                            )
                     break
             except socket.timeout:
                 print(
                     f"Timeout occurred while transferring {local_file} to {remote_file}"
                 )
-                timeout_retries -= 1
-                if timeout_retries > 0:
+                max_retries -= 1
+                if max_retries > 0:
                     print("Retrying...")
                 else:
-                    print("Max retries exceeded, aborting.")
+                    print("Max retries exceeded. Aborting.")
                     break
             except Exception as e:
                 print(f"Error transferring {local_file} to {remote_file}: {e}")
@@ -206,6 +278,7 @@ class SSHProcessor:
                 if channel in rlist:
                     if channel.recv_ready():
                         resp = channel.recv(1024)
+                        # 使用utf-8解码，失败部分替换为'?'
                         content = resp.decode("utf-8", errors="replace")
                         if content:
                             print(content, end="")
