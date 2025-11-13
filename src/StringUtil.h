@@ -35,7 +35,7 @@ public:
      * @param separator 分隔符
      * @return std::vector<std::string>
      */
-    static stringlist Split( const std::string &str, const std::string &separator );
+    static stringlist Split( const std::string &str, std::string_view separator );
     /**
      * @brief 拼接字符串
      *
@@ -45,7 +45,7 @@ public:
      * @return std::string
      */
     template <typename... Args>
-    static std::string Join( const std::string &separator, Args... args ) {
+    [[nodiscard]] static std::string Join( std::string_view separator, Args... args ) {
         static_assert( IsStringType<Args...>::value, "Join requires argument is string type" );
         static_assert( sizeof...( args ) > 0, "Join requires at least one argument" );
         std::ostringstream oss;
@@ -58,21 +58,24 @@ public:
     /**
      * @brief 针对于字符串容器的拼接函数
      *
-     * @tparam Container 容器类型，其元素类型为std::string
+     * @tparam Container 容器类型
      * @param separator 分隔符
      * @param container 字符串容器
      * @return std::string
      */
-    template <template <class> class Container>
-    static std::string Join( const std::string &separator, const Container<std::string> &container ) {
-        std::string result;
-        auto        iter = std::cbegin( container );
-        auto        end  = std::cend( container );
+    template <typename Container>
+    [[nodiscard]] static std::string Join( std::string_view separator, const Container &container ) {
+        auto iter = std::cbegin( container );
+        auto end  = std::cend( container );
 
-        if ( iter != end ) {
-            result += *iter;  // 加入第一个元素到结果中
-            ++iter;
+        if ( iter == end ) {
+            return {};
         }
+
+        std::string result;
+        result += *iter;  // 加入第一个元素到结果中
+        ++iter;
+
         // 遍历容器剩余的元素，将分隔符和元素依次连接到结果中
         for ( ; iter != end; ++iter ) {
             result += separator;
@@ -143,7 +146,7 @@ public:
      * @param separator 分隔符
      * @return std::string
      */
-    static std::string ConvertToHexStr( const char *data, char separator = ' ' );
+    static std::string ConvertToHexStr( std::string_view data, char separator = ' ' );
     /**
      * @brief 转换为二进制字符串
      *

@@ -16,7 +16,7 @@ stringlist StringUtil::Compact( const stringlist &tokens ) {
     return compacted;
 }
 
-stringlist StringUtil::Split( const std::string &str, const std::string &separator ) {
+stringlist StringUtil::Split( const std::string &str, std::string_view separator ) {
     size_t     pos, last_pos = 0, len;
     stringlist tokens;
 
@@ -104,17 +104,13 @@ bool StringUtil::Contains( const std::string &str, const std::string &token ) {
     return str.find( token ) != std::string::npos ? true : false;
 }
 
-std::string StringUtil::ConvertToHexStr( const char *data, char separator ) {
-    if ( data == nullptr ) {
-        return "";
-    }
+std::string StringUtil::ConvertToHexStr( std::string_view data, char separator ) {
     std::stringstream ss;
-    size_t            len = std::strlen( data );
-    for ( size_t i = 0; i < len; ++i ) {
+    for ( size_t i = 0; i < data.length(); ++i ) {
         // 每个字节转换为两位十六进制
         ss << std::setw( 2 ) << std::setfill( '0' ) << std::hex << (int)(unsigned char)data[i];
         // 在每两个字符之间添加间隔符
-        if ( i < len - 1 ) {
+        if ( i < data.length() - 1 ) {
             ss << separator;
         }
     }
