@@ -223,4 +223,51 @@ std::string FileUtil::CleanPath( const std::string &path ) {
     return path;
 }
 
+std::string FileUtil::Load2Str( const std::string &file_path ) noexcept {
+    std::error_code ec;
+    const auto      file_size = fs::file_size( file_path, ec );
+    if ( ec || !fs::is_regular_file( file_path ) ) {
+        return {};
+    }
+
+    std::string content;
+    content.resize( file_size );
+
+    std::ifstream file( file_path, std::ios::binary );
+    if ( !file ) {
+        return {};
+    }
+
+    file.read( content.data(), static_cast<std::streamsize>( file_size ) );
+    if ( !file.good() ) {
+        return {};
+    }
+
+    return content;
+}
+
+std::vector<uint8_t> FileUtil::Load2ByteArray( const std::string &file_path ) noexcept {
+    std::error_code ec;
+    const auto      file_size = fs::file_size( file_path, ec );
+    if ( ec || !fs::is_regular_file( file_path ) ) {
+        return {};
+    }
+
+    std::vector<uint8_t> buffer;
+    buffer.reserve( file_size );
+    buffer.resize( file_size );
+
+    std::ifstream file( file_path, std::ios::binary );
+    if ( !file ) {
+        return {};
+    }
+
+    file.read( reinterpret_cast<char *>( buffer.data() ), static_cast<std::streamsize>( file_size ) );
+    if ( !file.good() ) {
+        return {};
+    }
+
+    return buffer;
+}
+
 }  // namespace utils

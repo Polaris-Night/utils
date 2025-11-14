@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "Macros.h"
 
@@ -235,5 +236,19 @@ public:
      * @return std::string
      */
     static std::string CleanPath( const std::string &path );
+
+    /**
+     * @brief 以文本模式读取文件内容为 std::string (UTF-8)
+     * @param filePath 文件路径
+     * @return std::string 返回文件全部内容，如果文件不存在或读取失败则返回空字符串
+     */
+    [[nodiscard]] static std::string Load2Str( const std::string &file_path ) noexcept;
+
+    /**
+     * @brief 以二进制模式读取文件内容为字节数组
+     * @param filePath 文件路径
+     * @return std::vector<uint8_t> 包含原始字节流，如果文件不存在或读取失败则返回空数组
+     */
+    [[nodiscard]] static std::vector<uint8_t> Load2ByteArray( const std::string &file_path ) noexcept;
 };
 }  // namespace utils
