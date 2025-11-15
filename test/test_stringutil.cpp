@@ -77,6 +77,184 @@ TEST( StringUtilTest, Split ) {
     EXPECT_EQ( result_trailing_skip_sv, expect_result_trailing_skip_sv );
 }
 
+TEST( StringUtilTest, ReplaceFirst ) {
+    // 测试基本替换功能
+    EXPECT_EQ( utils::StringUtil::ReplaceFirst( "hello world hello", "hello", "hi" ), "hi world hello" );
+
+    // 测试没有匹配的情况
+    EXPECT_EQ( utils::StringUtil::ReplaceFirst( "hello world", "xyz", "hi" ), "hello world" );
+
+    // 测试空字符串替换
+    EXPECT_EQ( utils::StringUtil::ReplaceFirst( "hello", "", "hi" ), "hello" );
+
+    // 测试空字符串被替换
+    EXPECT_EQ( utils::StringUtil::ReplaceFirst( "hello", "hello", "" ), "" );
+
+    // 测试替换为空字符串
+    EXPECT_EQ( utils::StringUtil::ReplaceFirst( "hello world hello", "hello", "" ), " world hello" );
+
+    // 测试替换更长的字符串
+    EXPECT_EQ( utils::StringUtil::ReplaceFirst( "abc abc abc", "abc", "longer_string" ), "longer_string abc abc" );
+}
+
+TEST( StringUtilTest, ReplaceAll ) {
+    // 测试基本替换功能
+    EXPECT_EQ( utils::StringUtil::ReplaceAll( "hello world hello", "hello", "hi" ), "hi world hi" );
+
+    // 测试没有匹配的情况
+    EXPECT_EQ( utils::StringUtil::ReplaceAll( "hello world", "xyz", "hi" ), "hello world" );
+
+    // 测试空字符串替换
+    EXPECT_EQ( utils::StringUtil::ReplaceAll( "hello", "", "hi" ), "hello" );
+
+    // 测试空字符串被替换
+    EXPECT_EQ( utils::StringUtil::ReplaceAll( "hello", "hello", "" ), "" );
+
+    // 测试替换为空字符串
+    EXPECT_EQ( utils::StringUtil::ReplaceAll( "hello world hello", "hello", "" ), " world " );
+
+    // 测试替换更长的字符串
+    EXPECT_EQ( utils::StringUtil::ReplaceAll( "abc abc abc", "abc", "longer_string" ),
+               "longer_string longer_string longer_string" );
+
+    // 测试替换相同字符串
+    EXPECT_EQ( utils::StringUtil::ReplaceAll( "hello", "hello", "hello" ), "hello" );
+}
+
+TEST( StringUtilTest, EscapeC ) {
+    // 测试基本转义字符
+    EXPECT_EQ( utils::StringUtil::EscapeC( "Hello\nWorld" ), "Hello\\nWorld" );
+    EXPECT_EQ( utils::StringUtil::EscapeC( "Hello\tWorld" ), "Hello\\tWorld" );
+    EXPECT_EQ( utils::StringUtil::EscapeC( "Hello\rWorld" ), "Hello\\rWorld" );
+
+    // 测试引号转义
+    EXPECT_EQ( utils::StringUtil::EscapeC( "Hello\"World" ), "Hello\\\"World" );
+    EXPECT_EQ( utils::StringUtil::EscapeC( "Hello'World" ), "Hello\\'World" );
+
+    // 测试反斜杠转义
+    EXPECT_EQ( utils::StringUtil::EscapeC( "Hello\\World" ), "Hello\\\\World" );
+
+    // 测试十六进制转义
+    EXPECT_EQ( utils::StringUtil::EscapeC( std::string( "Hello\0World", 11 ) ), "Hello\\x00World" );
+    EXPECT_EQ( utils::StringUtil::EscapeC( std::string( "\x01\x02\x03", 3 ) ), "\\x01\\x02\\x03" );
+
+    // 测试可打印字符不转义
+    EXPECT_EQ( utils::StringUtil::EscapeC( "Hello World!" ), "Hello World!" );
+
+    // 测试空字符串
+    EXPECT_EQ( utils::StringUtil::EscapeC( "" ), "" );
+}
+
+TEST( StringUtilTest, UnescapeC ) {
+    // 测试基本转义字符
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "Hello\\nWorld" ), "Hello\nWorld" );
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "Hello\\tWorld" ), "Hello\tWorld" );
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "Hello\\rWorld" ), "Hello\rWorld" );
+
+    // 测试引号转义
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "Hello\\\"World" ), "Hello\"World" );
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "Hello\\'World" ), "Hello'World" );
+
+    // 测试反斜杠转义
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "Hello\\\\World" ), "Hello\\World" );
+
+    // 测试十六进制转义
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "Hello\\x41World" ), "HelloAWorld" );
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "\\x01\\x02\\x03" ), std::string( "\x01\x02\x03", 3 ) );
+
+    // 测试无效十六进制转义
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "\\xGG" ), "\\xGG" );
+
+    // 测试未知转义符
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "\\z" ), "\\z" );
+
+    // 测试空字符串
+    EXPECT_EQ( utils::StringUtil::UnescapeC( "" ), "" );
+}
+
+TEST( StringUtilTest, WildcardMatch ) {
+    // 测试基本通配符匹配
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "config.ini", "*.ini" ) );
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "data1.dat", "data?.dat" ) );
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "abc", "a*c" ) );
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "abcdef", "a*f" ) );
+
+    // 测试不匹配的情况
+    EXPECT_FALSE( utils::StringUtil::WildcardMatch( "acd", "ab*d" ) );
+    EXPECT_FALSE( utils::StringUtil::WildcardMatch( "config.txt", "*.ini" ) );
+
+    // 测试精确匹配
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "hello", "hello" ) );
+    EXPECT_FALSE( utils::StringUtil::WildcardMatch( "hello", "world" ) );
+
+    // 测试空字符串匹配
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "", "" ) );
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "", "*" ) );
+    EXPECT_FALSE( utils::StringUtil::WildcardMatch( "", "?" ) );
+
+    // 测试星号匹配
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "hello", "*" ) );
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "hello world", "hello*" ) );
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "hello world", "*world" ) );
+
+    // 测试问号匹配
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "hello", "h?llo" ) );
+    EXPECT_TRUE( utils::StringUtil::WildcardMatch( "hello", "?????" ) );
+    EXPECT_FALSE( utils::StringUtil::WildcardMatch( "hello", "????" ) );
+}
+
+TEST( StringUtilTest, ConvertByteUnit ) {
+    // 测试基本单位转换
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1.0, "MB", "KB" ), 1024.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1024.0, "KB", "B" ), 1048576.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1.0, "GB", "MB" ), 1024.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1.0, "TB", "GB" ), 1024.0 );
+
+    // 测试相同单位转换
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 100.0, "MB", "MB" ), 100.0 );
+
+    // 测试小数转换
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1.5, "MB", "KB" ), 1536.0 );
+
+    // 测试反向转换
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1024.0, "KB", "MB" ), 1.0 );
+
+    // 测试无效单位
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1.0, "XB", "KB" ), -1.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1.0, "MB", "XB" ), -1.0 );
+
+    // 测试大小写不敏感
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1.0, "mb", "kb" ), 1024.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 1.0, "Mb", "Kb" ), 1024.0 );
+
+    // 测试零值
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 0.0, "MB", "KB" ), 0.0 );
+}
+
+TEST( StringUtilTest, HumanizeBytes ) {
+    // 测试自动单位选择
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1024 ), "1.00 KB" );
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1048576 ), "1.00 MB" );
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1073741824 ), "1.00 GB" );
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 0 ), "0 B" );
+
+    // 测试指定精度
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1024, 1 ), "1.0 KB" );
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1536, 1 ), "1.5 KB" );
+
+    // 测试指定单位
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1024, 2, "KB" ), "1.00 KB" );
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1536, 1, "KB" ), "1.5 KB" );
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 2097152, 1, "MB" ), "2.0 MB" );
+
+    // 测试无效单位（应自动选择）
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1024, 2, "XB" ), "1.00 KB" );
+
+    // 测试较小值
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 512 ), "512.00 B" );
+    EXPECT_EQ( utils::StringUtil::HumanizeBytes( 1 ), "1.00 B" );
+}
+
 TEST( StringUtilTest, Substrings ) {
     // 测试Left和LeftRef函数
     EXPECT_EQ( utils::StringUtil::Left( "hello world", 5 ), "hello" );
@@ -207,6 +385,31 @@ TEST( StringUtilTest, ConvertToHex ) {
     EXPECT_EQ( utils::StringUtil::ConvertToHexStr( "abcABC" ), "61 62 63 41 42 43" );
     EXPECT_EQ( utils::StringUtil::ConvertToHexStr( ".-/&#" ), "2e 2d 2f 26 23" );
     EXPECT_EQ( utils::StringUtil::ToUpper( utils::StringUtil::ConvertToHexStr( ".-/&#" ) ), "2E 2D 2F 26 23" );
+}
+
+TEST( StringUtilTest, EqualsIgnoreCase ) {
+    // 测试相等的字符串（大小写不同）
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "Hello", "hello" ) );
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "HELLO", "hello" ) );
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "HeLLo", "hELLo" ) );
+
+    // 测试完全相等的字符串
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "hello", "hello" ) );
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "HELLO", "HELLO" ) );
+
+    // 测试不相等的字符串
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( "Hello", "world" ) );
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( "Hello", "Hello1" ) );
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( "Hello1", "Hello" ) );
+
+    // 测试空字符串
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "", "" ) );
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( "", "hello" ) );
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( "hello", "" ) );
+
+    // 测试特殊字符
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "Hello, World!", "hello, world!" ) );
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "123ABC", "123abc" ) );
 }
 
 TEST( StringUtilTest, IntToBitString ) {
@@ -618,4 +821,116 @@ TEST( StringUtilTest, Vasprintf ) {
 
     // 测试十六进制大写格式化
     EXPECT_EQ( utils::StringUtil::FormatCString( "%X %x %x", 0xabcd, 0xabcd, 0x1234 ), "ABCD abcd 1234" );
+}
+
+TEST( StringUtilTest, Padding ) {
+    // 测试PadLeft函数
+    EXPECT_EQ( utils::StringUtil::PadLeft( "test", 8 ), "    test" );
+    EXPECT_EQ( utils::StringUtil::PadLeft( "test", 8, '0' ), "0000test" );
+    EXPECT_EQ( utils::StringUtil::PadLeft( "test", 2 ), "test" );  // 字符串长度大于目标宽度
+    EXPECT_EQ( utils::StringUtil::PadLeft( "", 4, ' ' ), "    " );
+    EXPECT_EQ( utils::StringUtil::PadLeft( "test", 4 ), "test" );  // 字符串长度等于目标宽度
+
+    // 测试PadRight函数
+    EXPECT_EQ( utils::StringUtil::PadRight( "test", 8 ), "test    " );
+    EXPECT_EQ( utils::StringUtil::PadRight( "test", 8, '0' ), "test0000" );
+    EXPECT_EQ( utils::StringUtil::PadRight( "test", 2 ), "test" );  // 字符串长度大于目标宽度
+    EXPECT_EQ( utils::StringUtil::PadRight( "", 4, ' ' ), "    " );
+    EXPECT_EQ( utils::StringUtil::PadRight( "test", 4 ), "test" );  // 字符串长度等于目标宽度
+}
+
+TEST( StringUtilTest, RandomString ) {
+    // 测试随机字符串生成
+    auto random_str1 = utils::StringUtil::RandomString( 10 );
+    EXPECT_EQ( random_str1.length(), 10 );
+
+    auto random_str2 = utils::StringUtil::RandomString( 10 );
+    EXPECT_EQ( random_str2.length(), 10 );
+
+    // 两次生成的字符串应该不同（极大概率）
+    EXPECT_NE( random_str1, random_str2 );
+
+    // 测试指定字符集
+    auto random_digits = utils::StringUtil::RandomString( 5, "0123456789" );
+    EXPECT_EQ( random_digits.length(), 5 );
+    // 检查是否只包含数字
+    for ( char c : random_digits ) {
+        EXPECT_TRUE( c >= '0' && c <= '9' );
+    }
+
+    // 测试空字符集
+    auto empty_charset = utils::StringUtil::RandomString( 5, "" );
+    EXPECT_TRUE( empty_charset.empty() );
+
+    // 测试长度为0
+    auto zero_length = utils::StringUtil::RandomString( 0 );
+    EXPECT_TRUE( zero_length.empty() );
+}
+
+TEST( StringUtilTest, IsNumeric ) {
+    // 测试整数
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "123" ) );
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "0" ) );
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "-123" ) );
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "+123" ) );
+
+    // 测试浮点数
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "123.456" ) );
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "-123.456" ) );
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "+123.456" ) );
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "0.0" ) );
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( ".123" ) );
+    EXPECT_TRUE( utils::StringUtil::IsNumeric( "123." ) );
+
+    // 测试非数字
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "abc" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "123abc" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "12.34.56" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "." ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "+" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "-" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "+-" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "12+34" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "12-34" ) );
+}
+
+TEST( StringUtilTest, IsUpper ) {
+    // 测试全大写
+    EXPECT_TRUE( utils::StringUtil::IsUpper( "ABC" ) );
+    EXPECT_TRUE( utils::StringUtil::IsUpper( "HELLO" ) );
+    EXPECT_TRUE( utils::StringUtil::IsUpper( "A" ) );
+
+    // 测试包含小写
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "Abc" ) );
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "abc" ) );
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "ABC123abc" ) );
+
+    // 测试空字符串
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "" ) );
+
+    // 测试只包含数字或特殊字符
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "123" ) );
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "!@#" ) );
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "ABC123" ) );
+}
+
+TEST( StringUtilTest, IsLower ) {
+    // 测试全小写
+    EXPECT_TRUE( utils::StringUtil::IsLower( "abc" ) );
+    EXPECT_TRUE( utils::StringUtil::IsLower( "hello" ) );
+    EXPECT_TRUE( utils::StringUtil::IsLower( "a" ) );
+
+    // 测试包含大写
+    EXPECT_FALSE( utils::StringUtil::IsLower( "aBc" ) );
+    EXPECT_FALSE( utils::StringUtil::IsLower( "ABC" ) );
+    EXPECT_FALSE( utils::StringUtil::IsLower( "abc123ABC" ) );
+
+    // 测试空字符串
+    EXPECT_FALSE( utils::StringUtil::IsLower( "" ) );
+
+    // 测试只包含数字或特殊字符
+    EXPECT_FALSE( utils::StringUtil::IsLower( "123" ) );
+    EXPECT_FALSE( utils::StringUtil::IsLower( "!@#" ) );
+    EXPECT_FALSE( utils::StringUtil::IsLower( "abc123" ) );
 }

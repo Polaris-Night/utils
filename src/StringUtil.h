@@ -48,19 +48,139 @@ public:
     [[nodiscard]] static std::vector<std::string_view> SplitRef( std::string_view str, std::string_view separator,
                                                                  bool skip_empty = false ) noexcept;
     /**
+     * @brief 替换第一个匹配的子串
+     * @param str 源字符串
+     * @param from 要被替换的内容
+     * @param to 替换后的内容
+     * @return 替换后的字符串副本
+     */
+    [[nodiscard]] static std::string ReplaceFirst( std::string_view str, std::string_view from,
+                                                   std::string_view to ) noexcept;
+    /**
+     * @brief 全局替换所有匹配的子串
+     * @param str 源字符串
+     * @param from 要被替换的内容
+     * @param to 替换后的内容
+     * @return 所有匹配替换后的字符串
+     *
+     * @note 注意避免重叠问题导致无限循环（已内部规避）
+     */
+    [[nodiscard]] static std::string ReplaceAll( std::string_view str, std::string_view from,
+                                                 std::string_view to ) noexcept;
+    /**
+     * @brief 对字符串中的特殊字符进行 C 风格转义
+     *
+     * 转义下列字符：
+     *   \\n → \\n
+     *   \\r → \\r
+     *   \\t → \\t
+     *   \\\\ → \\\\
+     *   \\\" → \\\"
+     *   \\' → \\\'
+     *   其他不可打印字符（< 32 或 > 126）→ \\xHH 形式
+     *
+     * @param str 输入字符串（通常为 ASCII 或 UTF-8）
+     * @return 转义后的字符串
+     *
+     * @note
+     *   - 仅对控制字符和引号进行转义
+     *   - UTF-8 多字节字符不会被拆解（因为其字节值 > 127）
+     *   - 输出总是可打印 ASCII
+     *
+     * @example
+     *   EscapeC("Hello\nWorld\"") → "Hello\\nWorld\\\""
+     */
+    [[nodiscard]] static std::string EscapeC( std::string_view str ) noexcept;
+    /**
+     * @brief 解码 C 风格转义字符序列
+     *
+     * 支持以下转义：
+     *   \\n, \\r, \\t, \\\\\\, \\\", \\\', \\xHH（十六进制）
+     *
+     * @param str 已转义的字符串
+     * @return 原始二进制数据或文本
+     *
+     * @note
+     *   - 非法 \\xHH 忽略反斜杠保留原样
+     *   - 连续两个反斜杠变成一个 \\
+     *   - 不支持八进制转义（\\123）
+     *   - 对未知转义符（如 \\z）保留反斜杠和字符
+     *
+     * @example
+     *   UnescapeC("Hello\\nWorld") → "Hello\nWorld"
+     *   UnescapeC("Value:\\x20\\xFF") → "Value: \xFF"
+     */
+    [[nodiscard]] static std::string UnescapeC( std::string_view str ) noexcept;
+    /**
+     * @brief 使用通配符模式匹配字符串（支持 * 和 ?）
+     *
+     * 支持：
+     *   - `?` 匹配任意单个字符
+     *   - `*` 匹配任意数量字符（包括零个）
+     *
+     * @param str 待匹配字符串
+     * @param pattern 通配符模式（如 "*.txt", "file?.dat"）
+     * @return true 如果完全匹配
+     *
+     * @example
+     *   WildcardMatch("config.ini", "*.ini")     → true
+     *   WildcardMatch("data1.dat", "data?.dat") → true
+     *   WildcardMatch("abc", "a*c")              → true
+     *   WildcardMatch("acd", "ab*d")             → false
+     */
+    [[nodiscard]] static bool WildcardMatch( std::string_view str, std::string_view pattern ) noexcept;
+    /**
+     * @brief 在指定字节单位之间进行数值转换（基于 1024 进制）
+     *
+     * 将一个带源单位的数值转换为目标单位下的等效值。
+     * 所有单位基于 1024 换算（即 1 KB = 1024 B, 1 MB = 1024 KB）。
+     *
+     * @param value 数值
+     * @param from_unit 源单位，支持 "B", "KB", "MB", "GB", "TB"（不区分大小写）
+     * @param to_unit 目标单位，同上
+     * @return 转换后的数值；若单位无效或计算出错则返回 -1.0
+     *
+     * @example
+     *   ConvertByteUnit(1.0, "MB", "KB") → 1024.0
+     *   ConvertByteUnit(512, "KB", "B")  → 524288.0
+     *   ConvertByteUnit(2.5, "GB", "MB") → 2560.0
+     */
+    [[nodiscard]] static double ConvertByteUnit( double value, std::string_view from_unit,
+                                                 std::string_view to_unit ) noexcept;
+    /**
+     * @brief 将字节数转换为可读格式的字符串
+     *
+     * 可将字节数格式化为带单位的可读字符串。例如：
+     *   - 自动模式：选择最合适单位（KB, MB...）
+     *   - 指定单位：强制输出为某单位（如 always in "MB"）
+     *
+     * @param bytes 字节数（以 B 为单位）
+     * @param precision 小数点后保留位数（0 ~ 6），默认 2
+     * @param target_unit 目标单位（如 "MB"）；若为空或无效，则自动选择最合适单位
+     * @return 格式化字符串，例如 "1.23 MB"
+     *
+     * @example
+     *   HumanizeBytes(1024)             → "1.00 KB"
+     *   HumanizeBytes(1024, 1, "KB")    → "1.0 KB"
+     *   HumanizeBytes(1572864, 1, "MB") → "1.5 MB"
+     *   HumanizeBytes(999, 2, "XYZ")    → "999.00 B" （无效单位 → 自动）
+     */
+    [[nodiscard]] static std::string HumanizeBytes( uint64_t bytes, int precision = 2,
+                                                    std::string_view target_unit = {} ) noexcept;
+    /**
      * @brief 提取字符串左边指定长度的子字符串
      * @param str 输入字符串引用
      * @param len 要提取的长度，如果超过字符串长度则返回整个字符串
      * @return 返回左边子字符串的拷贝
      */
-    static std::string Left( std::string_view str, size_t len ) noexcept;
+    [[nodiscard]] static std::string Left( std::string_view str, size_t len ) noexcept;
     /**
      * @brief 提取字符串左边指定长度的子字符串引用
      * @param str 输入字符串引用
      * @param len 要提取的长度，如果超过字符串长度则返回整个字符串引用
      * @return 返回左边子字符串引用
      */
-    static std::string_view LeftRef( std::string_view str, size_t len ) noexcept;
+    [[nodiscard]] static std::string_view LeftRef( std::string_view str, size_t len ) noexcept;
     /**
      * @brief 从指定位置开始提取子字符串
      * @param str 输入字符串引用
@@ -68,7 +188,8 @@ public:
      * @param len 要提取的长度，如果为npos则提取到字符串末尾
      * @return 返回子字符串的拷贝
      */
-    static std::string Mid( std::string_view str, size_t pos, size_t len = std::string_view::npos ) noexcept;
+    [[nodiscard]] static std::string Mid( std::string_view str, size_t pos,
+                                          size_t len = std::string_view::npos ) noexcept;
     /**
      * @brief 从指定位置开始提取子字符串引用
      * @param str 输入字符串引用
@@ -76,21 +197,22 @@ public:
      * @param len 要提取的长度，如果为npos则提取到字符串末尾
      * @return 返回子字符串引用
      */
-    static std::string_view MidRef( std::string_view str, size_t pos, size_t len = std::string_view::npos ) noexcept;
+    [[nodiscard]] static std::string_view MidRef( std::string_view str, size_t pos,
+                                                  size_t len = std::string_view::npos ) noexcept;
     /**
      * @brief 提取字符串右边指定长度的子字符串
      * @param str 输入字符串引用
      * @param len 要提取的长度，如果超过字符串长度则返回整个字符串
      * @return 返回右边子字符串的拷贝
      */
-    static std::string Right( std::string_view str, size_t len ) noexcept;
+    [[nodiscard]] static std::string Right( std::string_view str, size_t len ) noexcept;
     /**
      * @brief 提取字符串右边指定长度的子字符串引用
      * @param str 输入字符串引用
      * @param len 要提取的长度，如果超过字符串长度则返回整个字符串引用
      * @return 返回右边子字符串引用
      */
-    static std::string_view RightRef( std::string_view str, size_t len ) noexcept;
+    [[nodiscard]] static std::string_view RightRef( std::string_view str, size_t len ) noexcept;
     /**
      * @brief 去除" \n\r\t\v\f"
      *
@@ -113,7 +235,7 @@ public:
         std::ostringstream oss;
         bool               first = true;
 
-        ( ( oss << ( first ? "" : separator ) << args, first = false ), ... );
+        ( ( oss << ( first ? "" : separator ) << std::forward<Args>( args ), first = false ), ... );
 
         return oss.str();
     }
@@ -159,7 +281,7 @@ public:
         if ( size < 0 ) {
             throw std::runtime_error( "Format string error in StringUtil::FormatCString" );
         }
-        std::unique_ptr<char[]> buffer = std::make_unique<char[]>( size + 1 );
+        auto buffer = std::make_unique<char[]>( size + 1 );
         std::snprintf( buffer.get(), size + 1, format.data(), std::forward<Args>( args )... );
         return std::string( buffer.get(), size );
     }
@@ -177,14 +299,14 @@ public:
      * @param str 字符串
      * @return std::string
      */
-    static std::string ToUpper( const std::string &str );
+    static std::string ToUpper( std::string_view str );
     /**
      * @brief 字符串转小写
      *
      * @param str 字符串
      * @return std::string
      */
-    static std::string ToLower( const std::string &str );
+    static std::string ToLower( std::string_view str );
     /**
      * @brief 检查字符串是否以prefix开头
      *
@@ -221,13 +343,22 @@ public:
      */
     static std::string ConvertToHexStr( std::string_view data, char separator = ' ' );
     /**
+     * @brief 忽略大小写的字符串比较
+     *
+     * @param str1 第一个字符串
+     * @param str2 第二个字符串
+     * @return true 如果两个字符串相等（忽略大小写）
+     * @return false 如果两个字符串不相等
+     */
+    static bool EqualsIgnoreCase( std::string_view str1, std::string_view str2 ) noexcept;
+    /**
      * @brief 转换为二进制字符串
      *
      * @param value 数值
      * @param count 二进制位数
      * @return std::string
      */
-    static std::string IntToBitString( uint64_t value, int count );
+    static std::string IntToBitString( uint64_t value, int count ) noexcept;
     /**
      * @brief 将字符串安全转换为指定数值类型 T
      *
@@ -419,16 +550,59 @@ public:
      */
     static std::vector<std::string> ExtractAllGroups( std::string_view text, std::string_view pattern,
                                                       size_t group_index = 1, std::string *error_msg = nullptr );
+    /**
+     * @brief 在字符串左侧填充字符至指定长度
+     * @param str 原字符串
+     * @param width 目标长度
+     * @param fill_char 填充字符
+     * @return 填充后的字符串
+     */
+    [[nodiscard]] static std::string PadLeft( std::string_view str, size_t width, char fill_char = ' ' ) noexcept;
+    /**
+     * @brief 在字符串右侧填充字符至指定长度
+     * @param str 原字符串
+     * @param width 目标长度
+     * @param fill_char 填充字符
+     * @return 填充后的字符串
+     */
+    [[nodiscard]] static std::string PadRight( std::string_view str, size_t width, char fill_char = ' ' ) noexcept;
+    /**
+     * @brief 生成随机字符串
+     * @param length 字符串长度
+     * @param charset 字符集
+     * @return 随机字符串
+     */
+    [[nodiscard]] static std::string RandomString(
+        size_t           length,
+        std::string_view charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" ) noexcept;
+    /**
+     * @brief 检查字符串是否为数字
+     * @param str 输入字符串
+     * @return 是否为数字
+     */
+    static bool IsNumeric( std::string_view str ) noexcept;
+    /**
+     * @brief 检查字符串是否全为大写
+     * @param str 输入字符串
+     * @return 是否全为大写
+     */
+    static bool IsUpper( std::string_view str ) noexcept;
+    /**
+     * @brief 检查字符串是否全为小写
+     * @param str 输入字符串
+     * @return 是否全为小写
+     */
+    static bool IsLower( std::string_view str ) noexcept;
 
 private:
     /// 清除错误输出缓冲区
-    static void ClearError( std::string *error_msg );
+    static void ClearError( std::string *error_msg ) noexcept;
     /// 设置错误信息（内部工具，支持变参拼接）
     template <typename... Args>
-    static void SetError( std::string *error_msg, Args &&...args ) {
+    static void SetError( std::string *error_msg, Args &&...args ) noexcept {
         if ( error_msg ) {
             error_msg->clear();
-            ( ..., ( error_msg->append( args ) ) );
+            ( ..., ( error_msg->append( std::forward<Args>( args ) ) ) );
         }
     }
     /// 检测整数进制：支持 0x（16进制）、0（8进制）、其余为10进制
@@ -515,17 +689,17 @@ public:
 
 private:
     std::string format_;
-    size_t      m_current_arg_index = 1;
+    size_t      current_arg_index_ = 1;
 
     // 内部辅助函数：替换格式字符串中的占位符
     void ReplacePlaceholder( const std::string &value ) {
-        std::string placeholder = "%" + std::to_string( m_current_arg_index );
+        std::string placeholder = "%" + std::to_string( current_arg_index_ );
         size_t      pos         = 0;
         while ( ( pos = format_.find( placeholder, pos ) ) != std::string::npos ) {
             format_.replace( pos, placeholder.length(), value );
             pos += ( value.length() == 0 ) ? 1 : value.length();
         }
-        m_current_arg_index++;
+        current_arg_index_++;
     }
 
     // 内部辅助函数：将各种类型转换为字符串
