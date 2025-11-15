@@ -5,10 +5,117 @@
 #include "gtest/gtest.h"
 
 TEST( StringUtilTest, Split ) {
+    // 测试Split基本功能
     std::vector<std::string> expect_result{ "1", "2", "3", "-", "/", "&" };
     std::vector<std::string> result;
     result = utils::StringUtil::Split( "1 2 3 - / &", " " );
     EXPECT_EQ( result, expect_result );
+
+    // 测试SplitRef基本功能
+    std::vector<std::string_view> expect_result_sv{ "1", "2", "3", "-", "/", "&" };
+    std::vector<std::string_view> result_sv = utils::StringUtil::SplitRef( "1 2 3 - / &", " " );
+    EXPECT_EQ( result_sv, expect_result_sv );
+
+    // 测试空分隔符的情况
+    std::vector<std::string> expect_result_empty_sep{ "", "a", "b", "c", "" };
+    std::vector<std::string> result_empty_sep = utils::StringUtil::Split( "abc", "" );
+    EXPECT_EQ( result_empty_sep, expect_result_empty_sep );
+
+    // 测试SplitRef使用空分隔符
+    std::vector<std::string_view> expect_result_empty_sep_sv{ "", "a", "b", "c", "" };
+    std::vector<std::string_view> result_empty_sep_sv = utils::StringUtil::SplitRef( "abc", "" );
+    EXPECT_EQ( result_empty_sep_sv, expect_result_empty_sep_sv );
+
+    // 测试空分隔符且跳过空项的情况
+    std::vector<std::string> expect_result_empty_sep_skip{ "a", "b", "c" };
+    std::vector<std::string> result_empty_sep_skip = utils::StringUtil::Split( "abc", "", true );
+    EXPECT_EQ( result_empty_sep_skip, expect_result_empty_sep_skip );
+
+    // 测试SplitRef使用空分隔符且跳过空项
+    std::vector<std::string_view> expect_result_empty_sep_skip_sv{ "a", "b", "c" };
+    std::vector<std::string_view> result_empty_sep_skip_sv = utils::StringUtil::SplitRef( "abc", "", true );
+    EXPECT_EQ( result_empty_sep_skip_sv, expect_result_empty_sep_skip_sv );
+
+    // 测试连续分隔符的情况
+    std::vector<std::string> expect_result_consecutive{ "a", "", "b", "c" };
+    std::vector<std::string> result_consecutive = utils::StringUtil::Split( "a,,b,c", "," );
+    EXPECT_EQ( result_consecutive, expect_result_consecutive );
+
+    // 测试SplitRef处理连续分隔符
+    std::vector<std::string_view> expect_result_consecutive_sv{ "a", "", "b", "c" };
+    std::vector<std::string_view> result_consecutive_sv = utils::StringUtil::SplitRef( "a,,b,c", "," );
+    EXPECT_EQ( result_consecutive_sv, expect_result_consecutive_sv );
+
+    // 测试连续分隔符且跳过空项的情况
+    std::vector<std::string> expect_result_consecutive_skip{ "a", "b", "c" };
+    std::vector<std::string> result_consecutive_skip = utils::StringUtil::Split( "a,,b,c", ",", true );
+    EXPECT_EQ( result_consecutive_skip, expect_result_consecutive_skip );
+
+    // 测试SplitRef处理连续分隔符且跳过空项
+    std::vector<std::string_view> expect_result_consecutive_skip_sv{ "a", "b", "c" };
+    std::vector<std::string_view> result_consecutive_skip_sv = utils::StringUtil::SplitRef( "a,,b,c", ",", true );
+    EXPECT_EQ( result_consecutive_skip_sv, expect_result_consecutive_skip_sv );
+
+    // 测试末尾有分隔符的情况
+    std::vector<std::string> expect_result_trailing{ "a", "b", "" };
+    std::vector<std::string> result_trailing = utils::StringUtil::Split( "a,b,", "," );
+    EXPECT_EQ( result_trailing, expect_result_trailing );
+
+    // 测试SplitRef处理末尾有分隔符的情况
+    std::vector<std::string_view> expect_result_trailing_sv{ "a", "b", "" };
+    std::vector<std::string_view> result_trailing_sv = utils::StringUtil::SplitRef( "a,b,", "," );
+    EXPECT_EQ( result_trailing_sv, expect_result_trailing_sv );
+
+    // 测试末尾有分隔符且跳过空项的情况
+    std::vector<std::string> expect_result_trailing_skip{ "a", "b" };
+    std::vector<std::string> result_trailing_skip = utils::StringUtil::Split( "a,b,", ",", true );
+    EXPECT_EQ( result_trailing_skip, expect_result_trailing_skip );
+
+    // 测试SplitRef处理末尾有分隔符且跳过空项
+    std::vector<std::string_view> expect_result_trailing_skip_sv{ "a", "b" };
+    std::vector<std::string_view> result_trailing_skip_sv = utils::StringUtil::SplitRef( "a,b,", ",", true );
+    EXPECT_EQ( result_trailing_skip_sv, expect_result_trailing_skip_sv );
+}
+
+TEST( StringUtilTest, Substrings ) {
+    // 测试Left和LeftRef函数
+    EXPECT_EQ( utils::StringUtil::Left( "hello world", 5 ), "hello" );
+    EXPECT_EQ( utils::StringUtil::Left( "hello", 10 ), "hello" );
+    EXPECT_EQ( utils::StringUtil::Left( "hello", 0 ), "" );
+    EXPECT_EQ( utils::StringUtil::Left( "", 5 ), "" );
+
+    EXPECT_EQ( utils::StringUtil::LeftRef( "hello world", 5 ), "hello" );
+    EXPECT_EQ( utils::StringUtil::LeftRef( "hello", 10 ), "hello" );
+    EXPECT_EQ( utils::StringUtil::LeftRef( "hello", 0 ), "" );
+    EXPECT_EQ( utils::StringUtil::LeftRef( "", 5 ), "" );
+
+    // 测试Mid和MidRef函数
+    EXPECT_EQ( utils::StringUtil::Mid( "hello world", 6 ), "world" );
+    EXPECT_EQ( utils::StringUtil::Mid( "hello world", 6, 3 ), "wor" );
+    EXPECT_EQ( utils::StringUtil::Mid( "hello world", 0, 5 ), "hello" );
+    EXPECT_EQ( utils::StringUtil::Mid( "hello world", 20 ), "" );
+    EXPECT_EQ( utils::StringUtil::Mid( "hello", 1, 3 ), "ell" );
+    EXPECT_EQ( utils::StringUtil::Mid( "", 0, 5 ), "" );
+
+    EXPECT_EQ( utils::StringUtil::MidRef( "hello world", 6 ), "world" );
+    EXPECT_EQ( utils::StringUtil::MidRef( "hello world", 6, 3 ), "wor" );
+    EXPECT_EQ( utils::StringUtil::MidRef( "hello world", 0, 5 ), "hello" );
+    EXPECT_EQ( utils::StringUtil::MidRef( "hello world", 20 ), "" );
+    EXPECT_EQ( utils::StringUtil::MidRef( "hello", 1, 3 ), "ell" );
+    EXPECT_EQ( utils::StringUtil::MidRef( "", 0, 5 ), "" );
+
+    // 测试Right和RightRef函数
+    EXPECT_EQ( utils::StringUtil::Right( "hello world", 5 ), "world" );
+    EXPECT_EQ( utils::StringUtil::Right( "hello", 10 ), "hello" );
+    EXPECT_EQ( utils::StringUtil::Right( "hello", 0 ), "" );
+    EXPECT_EQ( utils::StringUtil::Right( "", 5 ), "" );
+    EXPECT_EQ( utils::StringUtil::Right( "hello world", 4 ), "orld" );
+
+    EXPECT_EQ( utils::StringUtil::RightRef( "hello world", 5 ), "world" );
+    EXPECT_EQ( utils::StringUtil::RightRef( "hello", 10 ), "hello" );
+    EXPECT_EQ( utils::StringUtil::RightRef( "hello", 0 ), "" );
+    EXPECT_EQ( utils::StringUtil::RightRef( "", 5 ), "" );
+    EXPECT_EQ( utils::StringUtil::RightRef( "hello world", 4 ), "orld" );
 }
 
 TEST( StringUtilTest, Join ) {
@@ -400,4 +507,115 @@ TEST( StringUtilTest, FromNumber ) {
     // 精度参数不影响noexcept属性
     EXPECT_TRUE( noexcept( utils::StringUtil::FromNumber<double>( 3.14, 10, 2 ) ) );
     EXPECT_TRUE( noexcept( utils::StringUtil::FromNumber<float>( 3.14f, 10, -1 ) ) );
+}
+
+TEST( StringUtilTest, StringFormat ) {
+    // 测试基本字符串格式化功能
+    utils::StringFormat fmt1( "Hello %1, welcome to %2!" );
+    std::string         result1 = fmt1.Args( "World", "C++" ).ToString();
+    EXPECT_EQ( result1, "Hello World, welcome to C++!" );
+
+    // 测试整数参数
+    utils::StringFormat fmt2( "Value of x is %1 and y is %2" );
+    std::string         result2 = fmt2.Args( 10, 20 ).ToString();
+    EXPECT_EQ( result2, "Value of x is 10 and y is 20" );
+
+    // 测试浮点数参数
+    utils::StringFormat fmt3( "Pi is approximately %1" );
+    std::string         result3 = fmt3.Args( 3.14159 ).ToString();
+    EXPECT_EQ( result3, "Pi is approximately 3.14159" );
+
+    // 测试布尔值参数
+    utils::StringFormat fmt4( "Flag is %1" );
+    std::string         result4 = fmt4.Args( true ).ToString();
+    EXPECT_EQ( result4, "Flag is true" );
+
+    // 测试ArgsF方法和精度控制
+    utils::StringFormat fmt5( "Price: %1" );
+    std::string         result5 = fmt5.ArgsF( 2, 12.3456 ).ToString();
+    EXPECT_EQ( result5, "Price: 12.35" );
+
+    // 测试多个不同类型的参数混合使用
+    utils::StringFormat fmt6( "Name: %1, Age: %2, Height: %3, Student: %4" );
+    std::string         result6 = fmt6.Args( "Alice", 25 ).ArgsF( 1, 1.75 ).Args( true ).ToString();
+    EXPECT_EQ( result6, "Name: Alice, Age: 25, Height: 1.8, Student: true" );
+
+    // 测试同一占位符多次出现的情况
+    utils::StringFormat fmt7( "%1 is %2, %1 has %3 years old" );
+    std::string         result7 = fmt7.Args( "Alice", "student", 25 ).ToString();
+    EXPECT_EQ( result7, "Alice is student, Alice has 25 years old" );
+
+    // 测试空格式字符串
+    utils::StringFormat fmt8( "" );
+    std::string         result8 = fmt8.ToString();
+    EXPECT_EQ( result8, "" );
+
+    // 测试没有占位符的字符串
+    utils::StringFormat fmt9( "This is a plain text without placeholders" );
+    std::string         result9 = fmt9.Args( "unused" ).ToString();
+    EXPECT_EQ( result9, "This is a plain text without placeholders" );
+
+    // 测试空参数
+    utils::StringFormat fmt10( "Start %1 %2 End" );
+    std::string         result10 = fmt10.Args( "" ).ToString();
+    EXPECT_EQ( result10, "Start  %2 End" );
+    EXPECT_EQ( fmt10.Args( "", "" ).ToString(), "Start   End" );
+
+    // 测试多个参数混合使用
+    utils::StringFormat fmt12( "%1 %2 %1 %3 %2 %1 %4 %5" );
+    std::string         result12 = fmt12.Args( "a", "b", "c" ).ArgsF( 3, 3.14 ).Args( 55 ).ToString();
+    EXPECT_EQ( result12, "a b a c b a 3.140 55" );
+}
+
+TEST( StringUtilTest, Vasprintf ) {
+    // 测试基本的格式化功能
+    std::string result = utils::StringUtil::FormatCString( "Hello %s", "World" );
+    EXPECT_EQ( result, "Hello World" );
+
+    // 测试整数格式化
+    result = utils::StringUtil::FormatCString( "Value: %d", 42 );
+    EXPECT_EQ( result, "Value: 42" );
+
+    // 测试十六进制格式化
+    result = utils::StringUtil::FormatCString( "Hex: %x", 255 );
+    EXPECT_EQ( result, "Hex: ff" );
+
+    // 测试浮点数格式化
+    result = utils::StringUtil::FormatCString( "Float: %.2f", 3.14159 );
+    EXPECT_EQ( result, "Float: 3.14" );
+
+    // 测试多个参数
+    result = utils::StringUtil::FormatCString( "Name: %s, Age: %d, Score: %.1f", "Alice", 25, 95.5 );
+    EXPECT_EQ( result, "Name: Alice, Age: 25, Score: 95.5" );
+
+    // 测试不同的数据类型
+    result = utils::StringUtil::FormatCString( "Char: %c, Unsigned: %u", 'A', 123u );
+    EXPECT_EQ( result, "Char: A, Unsigned: 123" );
+
+    // 测试指针类型（输出格式可能因平台而异）
+    result = utils::StringUtil::FormatCString( "Pointer: %p", nullptr );
+    // 只验证不为空且不抛出异常
+    EXPECT_FALSE( result.empty() );
+
+    // 测试宽度和对齐
+    result = utils::StringUtil::FormatCString( "Padded: %10s", "test" );
+    EXPECT_EQ( result, "Padded:       test" );
+
+    // 测试负数格式化
+    result = utils::StringUtil::FormatCString( "Negative: %d", -42 );
+    EXPECT_EQ( result, "Negative: -42" );
+
+    // 测试空字符串格式化
+    result = utils::StringUtil::FormatCString( "%s", "" );
+    EXPECT_EQ( result, "" );
+
+    // 测试格式化错误情况 - 应该抛出异常
+    EXPECT_THROW( utils::StringUtil::FormatCString( "%", 42 ), std::runtime_error );
+
+    // 测试复杂的格式化模式
+    result = utils::StringUtil::FormatCString( "%+05d % 6.2f %-10s", 42, 3.14, "right" );
+    EXPECT_EQ( result, "+0042   3.14 right     " );
+
+    // 测试十六进制大写格式化
+    EXPECT_EQ( utils::StringUtil::FormatCString( "%X %x %x", 0xabcd, 0xabcd, 0x1234 ), "ABCD abcd 1234" );
 }

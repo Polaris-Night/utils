@@ -21,30 +21,91 @@ int StringUtil::DetectBase( std::string_view str ) noexcept {
     return 10;
 }
 
-stringlist StringUtil::Split( std::string_view str, std::string_view separator ) {
-    size_t     pos, last_pos = 0, len;
-    stringlist tokens;
+std::vector<std::string> StringUtil::Split( std::string_view str, std::string_view separator,
+                                            bool skip_empty ) noexcept {
+    auto                     parts = SplitRef( str, separator, skip_empty );
+    std::vector<std::string> result;
+    result.reserve( parts.size() );
+    for ( const auto &sv : parts ) {
+        result.emplace_back( sv );
+    }
+    return result;
+}
 
-    while ( true ) {
-        pos = str.find( separator, last_pos );
-        if ( pos == std::string::npos ) {
-            pos = str.size();
-        }
+std::vector<std::string_view> StringUtil::SplitRef( std::string_view str, std::string_view separator,
+                                                    bool skip_empty ) noexcept {
+    std::vector<std::string_view> result;
+    result.reserve( str.size() + 2 );  // 空separator时最大可能N+2个元素
 
-        len = pos - last_pos;
-        if ( len != 0 ) {
-            tokens.push_back( std::string( str.substr( last_pos, len ) ) );
+    // 分隔符为空时，返回每个字符的子串
+    if ( separator.empty() ) {
+        if ( !skip_empty ) {
+            result.emplace_back( "" );
         }
-
-        if ( pos == str.size() ) {
-            break;
+        for ( size_t i = 0; i < str.size(); ++i ) {
+            result.emplace_back( &str[i], 1 );
         }
-        else {
-            last_pos = pos + separator.size();
+        if ( !skip_empty ) {
+            result.emplace_back( "" );
         }
+        return result;
     }
 
-    return tokens;
+    // 分隔符非空时，按常规方式分割
+    const size_t sep_len = separator.length();
+    size_t       pos     = 0;
+    size_t       found   = 0;
+
+    while ( ( found = str.find( separator, pos ) ) != std::string_view::npos ) {
+        std::string_view part = str.substr( pos, found - pos );
+        if ( !skip_empty || !part.empty() ) {
+            result.emplace_back( part );
+        }
+        pos = found + sep_len;
+    }
+
+    std::string_view last_part = str.substr( pos );
+    if ( !skip_empty || !last_part.empty() ) {
+        result.emplace_back( last_part );
+    }
+
+    return result;
+}
+
+std::string StringUtil::Left( std::string_view str, size_t len ) noexcept {
+    auto result = LeftRef( str, len );
+    return std::string{ result };
+}
+
+std::string_view StringUtil::LeftRef( std::string_view str, size_t len ) noexcept {
+    if ( len >= str.size() ) {
+        return str;
+    }
+    return str.substr( 0, len );
+}
+
+std::string StringUtil::Mid( std::string_view str, size_t pos, size_t len ) noexcept {
+    auto result = MidRef( str, pos, len );
+    return std::string{ result };
+}
+
+std::string_view StringUtil::MidRef( std::string_view str, size_t pos, size_t len ) noexcept {
+    if ( pos >= str.size() ) {
+        return std::string_view{};
+    }
+    return str.substr( pos, len );
+}
+
+std::string StringUtil::Right( std::string_view str, size_t len ) noexcept {
+    auto result = RightRef( str, len );
+    return std::string{ result };
+}
+
+std::string_view StringUtil::RightRef( std::string_view str, size_t len ) noexcept {
+    if ( len >= str.size() ) {
+        return str;
+    }
+    return str.substr( str.size() - len, len );
 }
 
 std::string StringUtil::Trim( std::string_view str ) noexcept {
