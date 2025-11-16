@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <iomanip>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -28,25 +29,31 @@ public:
      *
      * @param str 字符串
      * @param separator 分隔符
+     * @param skip_empty 是否跳过空子串
+     * @param each_char_as_separator 当为true时，将separator中的每个字符都作为独立的分隔符处理
      * @return std::vector<std::string> 返回子串的向量
      */
     [[nodiscard]] static std::vector<std::string> Split( std::string_view str, std::string_view separator,
-                                                         bool skip_empty = false ) noexcept;
+                                                         bool skip_empty             = false,
+                                                         bool each_char_as_separator = false ) noexcept;
     /**
      * @brief 将字符串按指定分隔符拆分为子串引用列表
      *
      * @param str 字符串
      * @param separator 分隔符
      * @param skip_empty 是否跳过空子串
+     * @param each_char_as_separator 当为true时，将separator中的每个字符都作为独立的分隔符处理
      * @return std::vector<std::string_view> 子串引用向量
      *
      * @example
      *   - SplitRef("a,,b,c", ",", false) → {"a", "", "b", "c"}
      *   - SplitRef("a,,b,c", ",", true)  → {"a", "b", "c"}
      *   - SplitRef("abc", "", false)     → {"", "a", "b", "c", ""}
+     *   - SplitRef("2023-10-10 21:58:00.123", "- :.", false, true) → {"2023", "10", "10", "21", "58", "00", "123"}
      */
     [[nodiscard]] static std::vector<std::string_view> SplitRef( std::string_view str, std::string_view separator,
-                                                                 bool skip_empty = false ) noexcept;
+                                                                 bool skip_empty             = false,
+                                                                 bool each_char_as_separator = false ) noexcept;
     /**
      * @brief 替换第一个匹配的子串
      * @param str 源字符串
@@ -229,7 +236,7 @@ public:
      * @return std::string
      */
     template <typename... Args>
-    [[nodiscard]] static std::string Join( std::string_view separator, Args... args ) {
+    [[nodiscard]] static std::string Join( std::string_view separator, Args &&...args ) {
         static_assert( sizeof...( args ) > 0, "Join requires at least one argument" );
         static_assert( ( IsStringType_v<Args>, ... ), "Join requires argument is string type" );
         std::ostringstream oss;
@@ -243,12 +250,12 @@ public:
      * @brief 针对于字符串容器的拼接函数
      *
      * @tparam Container 容器类型
-     * @param separator 分隔符
      * @param container 字符串容器
+     * @param separator 分隔符
      * @return std::string
      */
     template <typename Container>
-    [[nodiscard]] static std::string Join( std::string_view separator, const Container &container ) {
+    [[nodiscard]] static std::string Join( const Container &container, std::string_view separator ) {
         auto iter = std::cbegin( container );
         auto end  = std::cend( container );
 
@@ -485,7 +492,7 @@ public:
      */
     static std::optional<std::string_view> ExtractBetween( std::string_view str, std::string_view start,
                                                            std::string_view end, bool include_start = false,
-                                                           bool include_end = false );
+                                                           bool include_end = false ) noexcept;
     /**
      * @brief 提取文本中第一个完整匹配的子串
      *
@@ -621,13 +628,13 @@ private:
  * 2. 使用 ArgsF 方法：可以指定小数位精度，采用定点表示法（std::fixed）
  *
  */
-class StringFormat {
+class StringFormatter {
 public:
     /**
      * @brief 构造格式化对象
      * @param format 格式化字符串，使用 %1, %2, %3... 作为占位符
      */
-    explicit StringFormat( std::string_view format ) : format_( format ) {}
+    explicit StringFormatter( std::string_view format ) : format_( format ) {}
 
     /**
      * @brief 添加格式化参数，支持可变参数模板
@@ -649,7 +656,7 @@ public:
      *   - 如果占位符数量多于参数数量，多余的占位符将保留在结果中
      */
     template <typename... TArgs>
-    StringFormat &Args( TArgs &&...args ) {
+    StringFormatter &Args( TArgs &&...args ) {
         static_assert( sizeof...( args ) > 0, "Args requires at least one argument" );
         ( ( ReplacePlaceholder( ConvertToString( std::forward<TArgs>( args ) ) ) ), ... );
         return *this;
@@ -673,11 +680,11 @@ public:
      *   - 如果占位符数量多于参数数量，多余的占位符将保留在结果中
      */
     template <typename... FloatArgs>
-    StringFormat &ArgsF( int precision, FloatArgs... args ) {
+    StringFormatter &ArgsF( int precision, FloatArgs &&...args ) {
         static_assert( sizeof...( args ) > 0, "ArgsF requires at least one argument" );
-        static_assert( ( std::is_floating_point_v<FloatArgs> && ... ),
+        static_assert( ( std::is_floating_point_v<std::decay_t<FloatArgs>> && ... ),
                        "All FloatArgs must be floating point types (float or double)" );
-        ( ( ReplacePlaceholder( ConvertFloatToString( args, precision ) ) ), ... );
+        ( ReplacePlaceholder( ConvertFloatToString( std::forward<FloatArgs>( args ), precision ) ), ... );
         return *this;
     }
 
@@ -693,46 +700,46 @@ private:
 
     // 内部辅助函数：替换格式字符串中的占位符
     void ReplacePlaceholder( const std::string &value ) {
-        std::string placeholder = "%" + std::to_string( current_arg_index_ );
-        size_t      pos         = 0;
+        const std::string placeholder = "%" + std::to_string( current_arg_index_ );
+        const size_t      plen        = placeholder.size();
+        size_t            pos         = 0;
         while ( ( pos = format_.find( placeholder, pos ) ) != std::string::npos ) {
-            format_.replace( pos, placeholder.length(), value );
-            pos += ( value.length() == 0 ) ? 1 : value.length();
+            // Check if followed by a digit -> skip (e.g., %1 in %10)
+            if ( pos + plen >= format_.size() || !std::isdigit( static_cast<unsigned char>( format_[pos + plen] ) ) ) {
+                format_.replace( pos, plen, value );
+                pos += value.size();
+            }
+            else {
+                pos += plen;
+            }
         }
-        current_arg_index_++;
+        current_arg_index_ += 1;
     }
 
     // 内部辅助函数：将各种类型转换为字符串
     template <typename T>
-    static std::string ConvertToString( const T &value ) {
-        if constexpr ( std::is_arithmetic_v<T> && !std::is_same_v<T, bool> && !std::is_floating_point_v<T> ) {
-            // 整数类型转换
-            return std::to_string( value );
-        }
-        else if constexpr ( std::is_same_v<T, bool> ) {
-            // 布尔类型转换
+    static std::string ConvertToString( T &&value ) {
+        using Decayed = std::decay_t<T>;
+        if constexpr ( std::is_same_v<Decayed, bool> ) {
             return value ? "true" : "false";
         }
-        else if constexpr ( std::is_convertible_v<T, std::string_view> ) {
-            // 可转换为字符串视图的类型
-            return std::string{ std::string_view{ value } };
+        else if constexpr ( std::is_arithmetic_v<Decayed> && !std::is_floating_point_v<Decayed> ) {
+            return std::to_string( value );
         }
-        else if constexpr ( std::is_convertible_v<T, std::string> ) {
-            // 可转换为字符串的类型
-            return value;
-        }
-        else if constexpr ( std::is_floating_point_v<T> ) {
-            // 浮点类型转换，使用默认的 %g 格式
+        else if constexpr ( std::is_floating_point_v<Decayed> ) {
             std::ostringstream oss;
-            oss << std::defaultfloat << value;
+            oss << std::defaultfloat << std::setprecision( 6 ) << value;
             return oss.str();
         }
+        else if constexpr ( std::is_convertible_v<Decayed, std::string_view> ) {
+            return std::string{ std::string_view{ value } };
+        }
         else {
-            static_assert( std::is_arithmetic_v<T> || std::is_same_v<T, bool> ||
-                               std::is_convertible_v<T, std::string_view> || std::is_convertible_v<T, std::string> ||
-                               std::is_floating_point_v<T>,
-                           "Type must be convertible to string or arithmetic type" );
-            return std::to_string( value );
+            static_assert( std::is_same_v<Decayed, bool> ||
+                               (std::is_arithmetic_v<Decayed> && !std::is_floating_point_v<Decayed>) ||
+                               std::is_floating_point_v<Decayed> || std::is_convertible_v<Decayed, std::string_view>,
+                           "Unsupported type for string formatting" );
+            return {};  // unreachable
         }
     }
 

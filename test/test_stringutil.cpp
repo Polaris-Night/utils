@@ -4,6 +4,22 @@
 #include "StringUtil.h"
 #include "gtest/gtest.h"
 
+std::vector<std::string_view> SepStringView( const std::string_view &str, const std::string &sSep ) {
+    std::vector<std::string_view> result;
+    size_t                        pos = str.find_first_not_of( sSep );
+    while ( pos != str.npos ) {
+        auto rpos = str.find_first_of( sSep, pos );
+        result.push_back( str.substr( pos, rpos - pos ) );
+        if ( rpos != str.npos ) {
+            pos = str.find_first_not_of( sSep, rpos );
+        }
+        else {
+            pos = str.npos;
+        }
+    }
+    return result;
+}
+
 TEST( StringUtilTest, Split ) {
     // 测试Split基本功能
     std::vector<std::string> expect_result{ "1", "2", "3", "-", "/", "&" };
@@ -75,6 +91,53 @@ TEST( StringUtilTest, Split ) {
     std::vector<std::string_view> expect_result_trailing_skip_sv{ "a", "b" };
     std::vector<std::string_view> result_trailing_skip_sv = utils::StringUtil::SplitRef( "a,b,", ",", true );
     EXPECT_EQ( result_trailing_skip_sv, expect_result_trailing_skip_sv );
+}
+
+TEST( StringUtilTest, SplitCharMode ) {
+    // 测试字符分隔符模式的基本功能
+    std::vector<std::string_view> expect_result{ "2023", "10", "10", "21", "58", "00", "123", "456", "789" };
+    auto result = utils::StringUtil::SplitRef( "2023-10-10 21:58:00.123.456.789", "- :.", false, true );
+    EXPECT_EQ( result, expect_result );
+
+    // 测试字符分隔符模式跳过空项
+    std::vector<std::string_view> expect_result_skip{ "2023", "10", "10", "21", "58", "00", "123", "456", "789" };
+    auto result_skip = utils::StringUtil::SplitRef( "2023-10-10 21:58:00.123.456.789", "- :.", true, true );
+    EXPECT_EQ( result_skip, expect_result_skip );
+
+    // 测试字符分隔符模式与SepStringView函数结果一致
+    auto timelist   = utils::StringUtil::SplitRef( "2023-10-10 21:58:00.123.456.789", "- :.", false, true );
+    auto sep_result = SepStringView( "2023-10-10 21:58:00.123.456.789", "- :." );
+    EXPECT_EQ( timelist, sep_result );
+
+    // 测试字符分隔符模式处理连续分隔符
+    std::vector<std::string_view> expect_consecutive{ "a", "", "b", "", "", "c" };
+    auto                          result_consecutive = utils::StringUtil::SplitRef( "a,,b;;;c", ",;", false, true );
+    EXPECT_EQ( result_consecutive, expect_consecutive );
+
+    // 测试字符分隔符模式跳过空项
+    std::vector<std::string_view> expect_consecutive_skip{ "a", "b", "c" };
+    auto                          result_consecutive_skip = utils::StringUtil::SplitRef( "a,,b;;c", ",;", true, true );
+    EXPECT_EQ( result_consecutive_skip, expect_consecutive_skip );
+
+    // 测试字符分隔符模式处理开头和结尾的分隔符
+    std::vector<std::string_view> expect_edges{ "", "a", "b", "" };
+    auto                          result_edges = utils::StringUtil::SplitRef( ",a,b,", ",", false, true );
+    EXPECT_EQ( result_edges, expect_edges );
+
+    // 测试字符分隔符模式跳过空项时处理开头和结尾的分隔符
+    std::vector<std::string_view> expect_edges_skip{ "a", "b" };
+    auto                          result_edges_skip = utils::StringUtil::SplitRef( ",a,b,", ",", true, true );
+    EXPECT_EQ( result_edges_skip, expect_edges_skip );
+
+    // 测试默认模式保持不变（向后兼容性）
+    std::vector<std::string_view> expect_default{ "a", "b", "c", "d" };
+    auto                          result_default = utils::StringUtil::SplitRef( "a;b;c;d", ";", false, false );
+    EXPECT_EQ( result_default, expect_default );
+
+    // 测试默认模式与新字符模式的区别
+    std::vector<std::string_view> expect_default_multi{ "a", "b", "c", "d" };
+    auto                          result_default_multi = utils::StringUtil::SplitRef( "a;b;c;d", ";", false, true );
+    EXPECT_EQ( result_default_multi, expect_default_multi );
 }
 
 TEST( StringUtilTest, ReplaceFirst ) {
@@ -305,14 +368,14 @@ TEST( StringUtilTest, Join ) {
     s_vect.emplace_back( "1" );
     s_vect.emplace_back( "2" );
     s_vect.emplace_back( "3" );
-    result = utils::StringUtil::Join( ",", s_vect );
+    result = utils::StringUtil::Join( s_vect, "," );
     EXPECT_EQ( result, "1,2,3" );
 
     std::set<std::string> s_set;
     s_set.insert( "1" );
     s_set.insert( "1" );
     s_set.insert( "2" );
-    result = utils::StringUtil::Join( "-", s_set );
+    result = utils::StringUtil::Join( s_set, "-" );
     EXPECT_EQ( result, "1-2" );
 }
 
@@ -714,59 +777,64 @@ TEST( StringUtilTest, FromNumber ) {
 
 TEST( StringUtilTest, StringFormat ) {
     // 测试基本字符串格式化功能
-    utils::StringFormat fmt1( "Hello %1, welcome to %2!" );
-    std::string         result1 = fmt1.Args( "World", "C++" ).ToString();
+    utils::StringFormatter fmt1( "Hello %1, welcome to %2!" );
+    std::string            result1 = fmt1.Args( "World", "C++" ).ToString();
     EXPECT_EQ( result1, "Hello World, welcome to C++!" );
 
     // 测试整数参数
-    utils::StringFormat fmt2( "Value of x is %1 and y is %2" );
-    std::string         result2 = fmt2.Args( 10, 20 ).ToString();
+    utils::StringFormatter fmt2( "Value of x is %1 and y is %2" );
+    std::string            result2 = fmt2.Args( 10, 20 ).ToString();
     EXPECT_EQ( result2, "Value of x is 10 and y is 20" );
 
     // 测试浮点数参数
-    utils::StringFormat fmt3( "Pi is approximately %1" );
-    std::string         result3 = fmt3.Args( 3.14159 ).ToString();
+    utils::StringFormatter fmt3( "Pi is approximately %1" );
+    std::string            result3 = fmt3.Args( 3.14159 ).ToString();
     EXPECT_EQ( result3, "Pi is approximately 3.14159" );
 
     // 测试布尔值参数
-    utils::StringFormat fmt4( "Flag is %1" );
-    std::string         result4 = fmt4.Args( true ).ToString();
+    utils::StringFormatter fmt4( "Flag is %1" );
+    std::string            result4 = fmt4.Args( true ).ToString();
     EXPECT_EQ( result4, "Flag is true" );
 
     // 测试ArgsF方法和精度控制
-    utils::StringFormat fmt5( "Price: %1" );
-    std::string         result5 = fmt5.ArgsF( 2, 12.3456 ).ToString();
+    utils::StringFormatter fmt5( "Price: %1" );
+    std::string            result5 = fmt5.ArgsF( 2, 12.3456 ).ToString();
     EXPECT_EQ( result5, "Price: 12.35" );
 
     // 测试多个不同类型的参数混合使用
-    utils::StringFormat fmt6( "Name: %1, Age: %2, Height: %3, Student: %4" );
-    std::string         result6 = fmt6.Args( "Alice", 25 ).ArgsF( 1, 1.75 ).Args( true ).ToString();
+    utils::StringFormatter fmt6( "Name: %1, Age: %2, Height: %3, Student: %4" );
+    std::string            result6 = fmt6.Args( "Alice", 25 ).ArgsF( 1, 1.75 ).Args( true ).ToString();
     EXPECT_EQ( result6, "Name: Alice, Age: 25, Height: 1.8, Student: true" );
 
     // 测试同一占位符多次出现的情况
-    utils::StringFormat fmt7( "%1 is %2, %1 has %3 years old" );
-    std::string         result7 = fmt7.Args( "Alice", "student", 25 ).ToString();
+    utils::StringFormatter fmt7( "%1 is %2, %1 has %3 years old" );
+    std::string            result7 = fmt7.Args( "Alice", "student", 25 ).ToString();
     EXPECT_EQ( result7, "Alice is student, Alice has 25 years old" );
 
     // 测试空格式字符串
-    utils::StringFormat fmt8( "" );
-    std::string         result8 = fmt8.ToString();
+    utils::StringFormatter fmt8( "" );
+    std::string            result8 = fmt8.ToString();
     EXPECT_EQ( result8, "" );
 
     // 测试没有占位符的字符串
-    utils::StringFormat fmt9( "This is a plain text without placeholders" );
-    std::string         result9 = fmt9.Args( "unused" ).ToString();
+    utils::StringFormatter fmt9( "This is a plain text without placeholders" );
+    std::string            result9 = fmt9.Args( "unused" ).ToString();
     EXPECT_EQ( result9, "This is a plain text without placeholders" );
 
     // 测试空参数
-    utils::StringFormat fmt10( "Start %1 %2 End" );
-    std::string         result10 = fmt10.Args( "" ).ToString();
+    utils::StringFormatter fmt10( "Start %1 %2 End" );
+    std::string            result10 = fmt10.Args( "" ).ToString();
     EXPECT_EQ( result10, "Start  %2 End" );
     EXPECT_EQ( fmt10.Args( "", "" ).ToString(), "Start   End" );
 
+    // 超过10个参数
+    utils::StringFormatter fmt11( "%10-%1 %2 %3 %4 %5 %100 %6 %7 %8 %9 %10 %11" );
+    std::string            result11 = fmt11.Args( "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k" ).ToString();
+    EXPECT_EQ( result11, "j-a b c d e %100 f g h i j k" );
+
     // 测试多个参数混合使用
-    utils::StringFormat fmt12( "%1 %2 %1 %3 %2 %1 %4 %5" );
-    std::string         result12 = fmt12.Args( "a", "b", "c" ).ArgsF( 3, 3.14 ).Args( 55 ).ToString();
+    utils::StringFormatter fmt12( "%1 %2 %1 %3 %2 %1 %4 %5" );
+    std::string            result12 = fmt12.Args( "a", "b", "c" ).ArgsF( 3, 3.14 ).Args( 55 ).ToString();
     EXPECT_EQ( result12, "a b a c b a 3.140 55" );
 }
 

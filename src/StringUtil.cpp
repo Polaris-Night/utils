@@ -23,9 +23,9 @@ int StringUtil::DetectBase( std::string_view str ) noexcept {
     return 10;
 }
 
-std::vector<std::string> StringUtil::Split( std::string_view str, std::string_view separator,
-                                            bool skip_empty ) noexcept {
-    auto                     parts = SplitRef( str, separator, skip_empty );
+std::vector<std::string> StringUtil::Split( std::string_view str, std::string_view separator, bool skip_empty,
+                                            bool each_char_as_separator ) noexcept {
+    auto                     parts = SplitRef( str, separator, skip_empty, each_char_as_separator );
     std::vector<std::string> result;
     result.reserve( parts.size() );
     for ( const auto &sv : parts ) {
@@ -34,8 +34,8 @@ std::vector<std::string> StringUtil::Split( std::string_view str, std::string_vi
     return result;
 }
 
-std::vector<std::string_view> StringUtil::SplitRef( std::string_view str, std::string_view separator,
-                                                    bool skip_empty ) noexcept {
+std::vector<std::string_view> StringUtil::SplitRef( std::string_view str, std::string_view separator, bool skip_empty,
+                                                    bool each_char_as_separator ) noexcept {
     std::vector<std::string_view> result;
     result.reserve( str.size() + 2 );  // 空separator时最大可能N+2个元素
 
@@ -50,6 +50,25 @@ std::vector<std::string_view> StringUtil::SplitRef( std::string_view str, std::s
         if ( !skip_empty ) {
             result.emplace_back( "" );
         }
+        return result;
+    }
+
+    // 字符分隔符模式，将separator中的每个字符都作为独立的分隔符
+    if ( each_char_as_separator ) {
+        size_t last_pos = 0;
+
+        for ( size_t i = 0; i <= str.size(); ++i ) {
+            if ( i == str.size() || separator.find( str[i] ) != std::string_view::npos ) {
+                std::string_view part = str.substr( last_pos, i - last_pos );
+                // 根据skip_empty参数决定是否添加空字符串
+                if ( !skip_empty || !part.empty() ) {
+                    result.emplace_back( part );
+                }
+
+                last_pos = i + 1;
+            }
+        }
+
         return result;
     }
 
@@ -500,7 +519,7 @@ std::string StringUtil::IntToBitString( uint64_t value, int count ) noexcept {
 
 std::optional<std::string_view> StringUtil::ExtractBetween( std::string_view str, std::string_view start,
                                                             std::string_view end, bool include_start,
-                                                            bool include_end ) {
+                                                            bool include_end ) noexcept {
     // 查找起始位置
     size_t start_pos = 0;
     if ( !start.empty() ) {
@@ -671,7 +690,8 @@ std::string StringUtil::RandomString( size_t length, std::string_view charset ) 
     }
 
     thread_local static std::random_device rd;
-    thread_local static std::mt19937       gen( rd() );
+    thread_local static std::seed_seq      seed{ rd(), rd(), rd(), rd() };
+    thread_local static std::mt19937       gen( seed );
     std::uniform_int_distribution<size_t>  dis( 0, charset.length() - 1 );
 
     std::string result;

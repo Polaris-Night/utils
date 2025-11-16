@@ -78,7 +78,7 @@ size_t TarObject::GetFileCount() const {
 }
 
 TarResult TarObject::Compress() const {
-    TarResult  result;
+    TarResult                result;
     std::vector<std::string> cmd{ "tar", "-czf", tar_path_, "-P" };
     for ( auto &exclude : exclude_list_ ) {
         cmd.emplace_back( "--exclude='" + exclude + "'" );
@@ -95,7 +95,7 @@ TarResult TarObject::Compress() const {
             cmd.emplace_back( file );
         }
     }
-    if ( std::system( StringUtil::Join( " ", cmd ).c_str() ) != 0 ) {
+    if ( std::system( StringUtil::Join( cmd, " " ).c_str() ) != 0 ) {
         result.success = false;
     }
     else {
@@ -114,10 +114,10 @@ bool TarObject::TarExist() const {
 }
 
 TarResult TarUtil::Compress( const std::string &tar_path, const std::set<std::string> &source_list ) {
-    TarResult  result;
+    TarResult                result;
     std::vector<std::string> cmd{ "tar", "-czfP", tar_path };
     cmd.insert( cmd.end(), source_list.begin(), source_list.end() );
-    if ( std::system( StringUtil::Join( " ", cmd ).c_str() ) != 0 ) {
+    if ( std::system( StringUtil::Join( cmd, " " ).c_str() ) != 0 ) {
         result.success = false;
     }
     else {
