@@ -1002,3 +1002,77 @@ TEST( StringUtilTest, IsLower ) {
     EXPECT_FALSE( utils::StringUtil::IsLower( "!@#" ) );
     EXPECT_FALSE( utils::StringUtil::IsLower( "abc123" ) );
 }
+
+TEST( StringUtilTest, CamelToSnake ) {
+    // 基本测试用例
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "myVariableName" ), "my_variable_name" );
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "XMLParser" ), "xml_parser" );
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "URL" ), "url" );
+
+    // 测试首字母大写
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "CamelCase" ), "camel_case" );
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "LowerCase" ), "lower_case" );
+
+    // 测试连续大写字母
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "XMLHttpRequest" ), "xml_http_request" );
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "HTMLElement" ), "html_element" );
+
+    // 测试单个单词
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "Variable" ), "variable" );
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "variable" ), "variable" );
+
+    // 测试空字符串
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "" ), "" );
+
+    // 测试全小写
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "lowercase" ), "lowercase" );
+
+    // 测试全大写
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "UPPERCASE" ), "uppercase" );
+
+    // 测试包含数字
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "variable1Name2" ), "variable1_name2" );
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "XML2Parser" ), "xml2_parser" );
+
+    // 测试单字符
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "A" ), "a" );
+    EXPECT_EQ( utils::StringUtil::CamelToSnake( "a" ), "a" );
+}
+
+TEST( StringUtilTest, SnakeToCamel ) {
+    // 基本测试用例（小驼峰）
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "my_variable_name", false ), "myVariableName" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "my_variable_name", true ), "MyVariableName" );
+
+    // 测试连续下划线
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "__a__b__", false ), "aB" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "__a__b__", true ), "AB" );
+
+    // 测试开头和结尾的下划线
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "_variable_name_", false ), "variableName" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "_variable_name_", true ), "VariableName" );
+
+    // 测试单个单词
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "variable", false ), "variable" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "variable", true ), "Variable" );
+
+    // 测试空字符串
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "", false ), "" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "", true ), "" );
+
+    // 测试只有下划线
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "___", false ), "" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "___", true ), "" );
+
+    // 测试包含数字
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "variable1_name2", false ), "variable1Name2" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "variable1_name2", true ), "Variable1Name2" );
+
+    // 测试单字符
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "a", false ), "a" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "a", true ), "A" );
+
+    // 测试空单词（连续下划线）
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "a__b", false ), "aB" );
+    EXPECT_EQ( utils::StringUtil::SnakeToCamel( "a__b", true ), "AB" );
+}

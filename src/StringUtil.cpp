@@ -754,4 +754,78 @@ bool StringUtil::IsLower( std::string_view str ) noexcept {
     return true;
 }
 
+std::string StringUtil::CamelToSnake( std::string_view str ) noexcept {
+    if ( str.empty() ) {
+        return {};
+    }
+
+    std::string result;
+    result.reserve( str.size() * 2 );  // 预留空间防多次 realloc
+
+    for ( size_t i = 0; i < str.size(); ++i ) {
+        const auto &c = str[i];
+        if ( std::isupper( static_cast<unsigned char>( c ) ) ) {
+            // 处理连续大写：若下一个字符是小写，或前一个不是大写，则前插 '_'
+            bool need_underscore = false;
+            if ( i > 0 ) {
+                // A 后接小写（如 'A' in "XMLParser" 的 'P' 前是 'L' 小写？不，需更细）
+                // 策略：如果当前是大写，且：
+                //   - 前一个不是大写，或
+                //   - 后一个是小写（说明这是词首）
+                if ( !std::isupper( static_cast<unsigned char>( str[i - 1] ) ) ) {
+                    need_underscore = true;
+                }
+                else if ( i + 1 < str.size() && std::islower( static_cast<unsigned char>( str[i + 1] ) ) ) {
+                    // 如 "XMLParser" -> 'L' 后是 'P'（大写），但 "Parse" 的 'P' 前是 'L'（大写），但后是 'a'（小写）→
+                    // 应拆
+                    need_underscore = true;
+                }
+            }
+            // 首字符不加 '_'
+            if ( need_underscore && i > 0 ) {
+                result += '_';
+            }
+            result += static_cast<char>( std::tolower( static_cast<unsigned char>( c ) ) );
+        }
+        else {
+            result += c;
+        }
+    }
+
+    return result;
+}
+
+std::string StringUtil::SnakeToCamel( std::string_view str, bool upper_first ) noexcept {
+    if ( str.empty() ) {
+        return {};
+    }
+
+    std::string result;
+    result.reserve( str.size() );
+
+    bool next_upper = upper_first;
+    for ( auto c : str ) {
+        if ( c == '_' ) {
+            next_upper = true;  // 下一个有效字母大写
+            continue;
+        }
+
+        if ( next_upper ) {
+            result += static_cast<char>( std::toupper( static_cast<unsigned char>( c ) ) );
+            next_upper = false;
+        }
+        else {
+            result += c;
+        }
+    }
+
+    // 如果需要首字母小写且结果不为空，则将首字母转为小写
+    if ( !upper_first && !result.empty() ) {
+        result[0] = static_cast<char>( std::tolower( static_cast<unsigned char>( result[0] ) ) );
+    }
+
+    // 如果全部是下划线（如 "___"），则返回空
+    return result;
+}
+
 }  // namespace utils

@@ -32,6 +32,20 @@ public:
      * @param skip_empty 是否跳过空子串
      * @param each_char_as_separator 当为true时，将separator中的每个字符都作为独立的分隔符处理
      * @return std::vector<std::string> 返回子串的向量
+     *
+     * @code{.cpp}
+     *   // 基本分割
+     *   auto result = Split("a,b,c", ",");
+     *   // result = {"a", "b", "c"}
+     *
+     *   // 跳过空项
+     *   auto result2 = Split("a,,b,c", ",", true);
+     *   // result2 = {"a", "b", "c"}
+     *
+     *   // 使用空分隔符
+     *   auto result3 = Split("abc", "");
+     *   // result3 = {"", "a", "b", "c", ""}
+     * @endcode
      */
     [[nodiscard]] static std::vector<std::string> Split( std::string_view str, std::string_view separator,
                                                          bool skip_empty             = false,
@@ -45,11 +59,23 @@ public:
      * @param each_char_as_separator 当为true时，将separator中的每个字符都作为独立的分隔符处理
      * @return std::vector<std::string_view> 子串引用向量
      *
-     * @example
-     *   - SplitRef("a,,b,c", ",", false) → {"a", "", "b", "c"}
-     *   - SplitRef("a,,b,c", ",", true)  → {"a", "b", "c"}
-     *   - SplitRef("abc", "", false)     → {"", "a", "b", "c", ""}
-     *   - SplitRef("2023-10-10 21:58:00.123", "- :.", false, true) → {"2023", "10", "10", "21", "58", "00", "123"}
+     * @code{.cpp}
+     *   // 基本分割
+     *   auto result = SplitRef("a,,b,c", ",", false);
+     *   // result = {"a", "", "b", "c"}
+     *
+     *   // 跳过空项
+     *   auto result2 = SplitRef("a,,b,c", ",", true);
+     *   // result2 = {"a", "b", "c"}
+     *
+     *   // 使用空分隔符
+     *   auto result3 = SplitRef("abc", "", false);
+     *   // result3 = {"", "a", "b", "c", ""}
+     *
+     *   // 字符模式分割
+     *   auto result4 = SplitRef("2023-10-10 21:58:00.123", "- :.", false, true);
+     *   // result4 = {"2023", "10", "10", "21", "58", "00", "123"}
+     * @endcode
      */
     [[nodiscard]] static std::vector<std::string_view> SplitRef( std::string_view str, std::string_view separator,
                                                                  bool skip_empty             = false,
@@ -60,6 +86,14 @@ public:
      * @param from 要被替换的内容
      * @param to 替换后的内容
      * @return 替换后的字符串副本
+     *
+     * @code{.cpp}
+     *   auto result = ReplaceFirst("hello world hello", "hello", "hi");
+     *   // result = "hi world hello"
+     *
+     *   auto result2 = ReplaceFirst("hello world", "xyz", "hi");
+     *   // result2 = "hello world"
+     * @endcode
      */
     [[nodiscard]] static std::string ReplaceFirst( std::string_view str, std::string_view from,
                                                    std::string_view to ) noexcept;
@@ -71,6 +105,14 @@ public:
      * @return 所有匹配替换后的字符串
      *
      * @note 注意避免重叠问题导致无限循环（已内部规避）
+     *
+     * @code{.cpp}
+     *   auto result = ReplaceAll("hello world hello", "hello", "hi");
+     *   // result = "hi world hi"
+     *
+     *   auto result2 = ReplaceAll("abc abc abc", "abc", "xyz");
+     *   // result2 = "xyz xyz xyz"
+     * @endcode
      */
     [[nodiscard]] static std::string ReplaceAll( std::string_view str, std::string_view from,
                                                  std::string_view to ) noexcept;
@@ -94,8 +136,13 @@ public:
      *   - UTF-8 多字节字符不会被拆解（因为其字节值 > 127）
      *   - 输出总是可打印 ASCII
      *
-     * @example
-     *   EscapeC("Hello\nWorld\"") → "Hello\\nWorld\\\""
+     * @code{.cpp}
+     *   auto result = EscapeC("Hello\nWorld\"");
+     *   // result = "Hello\\nWorld\\\""
+     *
+     *   auto result2 = EscapeC("Value:\x01\x02");
+     *   // result2 = "Value:\\x01\\x02"
+     * @endcode
      */
     [[nodiscard]] static std::string EscapeC( std::string_view str ) noexcept;
     /**
@@ -113,9 +160,13 @@ public:
      *   - 不支持八进制转义（\\123）
      *   - 对未知转义符（如 \\z）保留反斜杠和字符
      *
-     * @example
-     *   UnescapeC("Hello\\nWorld") → "Hello\nWorld"
-     *   UnescapeC("Value:\\x20\\xFF") → "Value: \xFF"
+     * @code{.cpp}
+     *   auto result = UnescapeC("Hello\\nWorld");
+     *   // result = "Hello\nWorld" (包含换行符)
+     *
+     *   auto result2 = UnescapeC("Value:\\x20\\xFF");
+     *   // result2 = "Value: \xFF" (包含空格和0xFF字节)
+     * @endcode
      */
     [[nodiscard]] static std::string UnescapeC( std::string_view str ) noexcept;
     /**
@@ -129,11 +180,19 @@ public:
      * @param pattern 通配符模式（如 "*.txt", "file?.dat"）
      * @return true 如果完全匹配
      *
-     * @example
-     *   WildcardMatch("config.ini", "*.ini")     → true
-     *   WildcardMatch("data1.dat", "data?.dat") → true
-     *   WildcardMatch("abc", "a*c")              → true
-     *   WildcardMatch("acd", "ab*d")             → false
+     * @code{.cpp}
+     *   bool result = WildcardMatch("config.ini", "*.ini");
+     *   // result = true
+     *
+     *   bool result2 = WildcardMatch("data1.dat", "data?.dat");
+     *   // result2 = true
+     *
+     *   bool result3 = WildcardMatch("abc", "a*c");
+     *   // result3 = true
+     *
+     *   bool result4 = WildcardMatch("acd", "ab*d");
+     *   // result4 = false
+     * @endcode
      */
     [[nodiscard]] static bool WildcardMatch( std::string_view str, std::string_view pattern ) noexcept;
     /**
@@ -147,10 +206,16 @@ public:
      * @param to_unit 目标单位，同上
      * @return 转换后的数值；若单位无效或计算出错则返回 -1.0
      *
-     * @example
-     *   ConvertByteUnit(1.0, "MB", "KB") → 1024.0
-     *   ConvertByteUnit(512, "KB", "B")  → 524288.0
-     *   ConvertByteUnit(2.5, "GB", "MB") → 2560.0
+     * @code{.cpp}
+     *   double result = ConvertByteUnit(1.0, "MB", "KB");
+     *   // result = 1024.0
+     *
+     *   double result2 = ConvertByteUnit(512, "KB", "B");
+     *   // result2 = 524288.0
+     *
+     *   double result3 = ConvertByteUnit(2.5, "GB", "MB");
+     *   // result3 = 2560.0
+     * @endcode
      */
     [[nodiscard]] static double ConvertByteUnit( double value, std::string_view from_unit,
                                                  std::string_view to_unit ) noexcept;
@@ -166,11 +231,16 @@ public:
      * @param target_unit 目标单位（如 "MB"）；若为空或无效，则自动选择最合适单位
      * @return 格式化字符串，例如 "1.23 MB"
      *
-     * @example
-     *   HumanizeBytes(1024)             → "1.00 KB"
-     *   HumanizeBytes(1024, 1, "KB")    → "1.0 KB"
-     *   HumanizeBytes(1572864, 1, "MB") → "1.5 MB"
-     *   HumanizeBytes(999, 2, "XYZ")    → "999.00 B" （无效单位 → 自动）
+     * @code{.cpp}
+     *   auto result = HumanizeBytes(1024);
+     *   // result = "1.00 KB"
+     *
+     *   auto result2 = HumanizeBytes(1024, 1, "KB");
+     *   // result2 = "1.0 KB"
+     *
+     *   auto result3 = HumanizeBytes(1572864, 1, "MB");
+     *   // result3 = "1.5 MB"
+     * @endcode
      */
     [[nodiscard]] static std::string HumanizeBytes( uint64_t bytes, int precision = 2,
                                                     std::string_view target_unit = {} ) noexcept;
@@ -179,6 +249,14 @@ public:
      * @param str 输入字符串引用
      * @param len 要提取的长度，如果超过字符串长度则返回整个字符串
      * @return 返回左边子字符串的拷贝
+     *
+     * @code{.cpp}
+     *   auto result = Left("hello world", 5);
+     *   // result = "hello"
+     *
+     *   auto result2 = Left("hello", 10);
+     *   // result2 = "hello"
+     * @endcode
      */
     [[nodiscard]] static std::string Left( std::string_view str, size_t len ) noexcept;
     /**
@@ -186,6 +264,14 @@ public:
      * @param str 输入字符串引用
      * @param len 要提取的长度，如果超过字符串长度则返回整个字符串引用
      * @return 返回左边子字符串引用
+     *
+     * @code{.cpp}
+     *   auto result = LeftRef("hello world", 5);
+     *   // result = "hello" (string_view引用)
+     *
+     *   auto result2 = LeftRef("hello", 10);
+     *   // result2 = "hello" (string_view引用)
+     * @endcode
      */
     [[nodiscard]] static std::string_view LeftRef( std::string_view str, size_t len ) noexcept;
     /**
@@ -194,6 +280,17 @@ public:
      * @param pos 起始位置，如果超出字符串长度则返回空字符串
      * @param len 要提取的长度，如果为npos则提取到字符串末尾
      * @return 返回子字符串的拷贝
+     *
+     * @code{.cpp}
+     *   auto result = Mid("hello world", 6);
+     *   // result = "world"
+     *
+     *   auto result2 = Mid("hello world", 6, 3);
+     *   // result2 = "wor"
+     *
+     *   auto result3 = Mid("hello world", 0, 5);
+     *   // result3 = "hello"
+     * @endcode
      */
     [[nodiscard]] static std::string Mid( std::string_view str, size_t pos,
                                           size_t len = std::string_view::npos ) noexcept;
@@ -203,6 +300,17 @@ public:
      * @param pos 起始位置，如果超出字符串长度则返回空字符串引用
      * @param len 要提取的长度，如果为npos则提取到字符串末尾
      * @return 返回子字符串引用
+     *
+     * @code{.cpp}
+     *   auto result = MidRef("hello world", 6);
+     *   // result = "world" (string_view引用)
+     *
+     *   auto result2 = MidRef("hello world", 6, 3);
+     *   // result2 = "wor" (string_view引用)
+     *
+     *   auto result3 = MidRef("hello world", 0, 5);
+     *   // result3 = "hello" (string_view引用)
+     * @endcode
      */
     [[nodiscard]] static std::string_view MidRef( std::string_view str, size_t pos,
                                                   size_t len = std::string_view::npos ) noexcept;
@@ -211,6 +319,14 @@ public:
      * @param str 输入字符串引用
      * @param len 要提取的长度，如果超过字符串长度则返回整个字符串
      * @return 返回右边子字符串的拷贝
+     *
+     * @code{.cpp}
+     *   auto result = Right("hello world", 5);
+     *   // result = "world"
+     *
+     *   auto result2 = Right("hello", 10);
+     *   // result2 = "hello"
+     * @endcode
      */
     [[nodiscard]] static std::string Right( std::string_view str, size_t len ) noexcept;
     /**
@@ -218,6 +334,14 @@ public:
      * @param str 输入字符串引用
      * @param len 要提取的长度，如果超过字符串长度则返回整个字符串引用
      * @return 返回右边子字符串引用
+     *
+     * @code{.cpp}
+     *   auto result = RightRef("hello world", 5);
+     *   // result = "world" (string_view引用)
+     *
+     *   auto result2 = RightRef("hello", 10);
+     *   // result2 = "hello" (string_view引用)
+     * @endcode
      */
     [[nodiscard]] static std::string_view RightRef( std::string_view str, size_t len ) noexcept;
     /**
@@ -225,6 +349,14 @@ public:
      *
      * @param str 字符串
      * @return std::string
+     *
+     * @code{.cpp}
+     *   auto result = Trim("  hello world  ");
+     *   // result = "hello world"
+     *
+     *   auto result2 = Trim("\t\n\r hello \t\n\r");
+     *   // result2 = "hello"
+     * @endcode
      */
     static std::string Trim( std::string_view str ) noexcept;
     /**
@@ -234,6 +366,15 @@ public:
      * @param separator 分隔符
      * @param args 字符串列表
      * @return std::string
+     *
+     * @code{.cpp}
+     *   auto result = Join("/", "1", std::string("2"), std::string_view("3"));
+     *   // result = "1/2/3"
+     *
+     *   std::vector<std::string> vec{"a", "b", "c"};
+     *   auto result2 = Join(vec, ",");
+     *   // result2 = "a,b,c"
+     * @endcode
      */
     template <typename... Args>
     [[nodiscard]] static std::string Join( std::string_view separator, Args &&...args ) {
@@ -253,6 +394,16 @@ public:
      * @param container 字符串容器
      * @param separator 分隔符
      * @return std::string
+     *
+     * @code{.cpp}
+     *   std::vector<std::string> vec{"1", "2", "3"};
+     *   auto result = Join(vec, ",");
+     *   // result = "1,2,3"
+     *
+     *   std::set<std::string> set{"a", "b", "c"};
+     *   auto result2 = Join(set, "-");
+     *   // result2 = "a-b-c" (顺序可能因set实现而异)
+     * @endcode
      */
     template <typename Container>
     [[nodiscard]] static std::string Join( const Container &container, std::string_view separator ) {
@@ -281,6 +432,14 @@ public:
      * @param args 参数列表
      * @return 格式化后的字符串
      * @throw std::runtime_error 当格式化失败时抛出异常
+     *
+     * @code{.cpp}
+     *   auto result = FormatCString("Hello %s, you are %d years old", "Alice", 25);
+     *   // result = "Hello Alice, you are 25 years old"
+     *
+     *   auto result2 = FormatCString("Value: %.2f", 3.14159);
+     *   // result2 = "Value: 3.14"
+     * @endcode
      */
     template <typename... Args>
     [[nodiscard]] static std::string FormatCString( std::string_view format, Args &&...args ) {
@@ -298,6 +457,14 @@ public:
      * @param str 字符串
      * @param times 重复次数
      * @return std::string
+     *
+     * @code{.cpp}
+     *   auto result = Repeat("abc", 3);
+     *   // result = "abcabcabc"
+     *
+     *   auto result2 = Repeat("1/", 5);
+     *   // result2 = "1/1/1/1/1/"
+     * @endcode
      */
     static std::string Repeat( std::string_view str, unsigned int times );
     /**
@@ -305,6 +472,14 @@ public:
      *
      * @param str 字符串
      * @return std::string
+     *
+     * @code{.cpp}
+     *   auto result = ToUpper("Hello World");
+     *   // result = "HELLO WORLD"
+     *
+     *   auto result2 = ToUpper("abc-def");
+     *   // result2 = "ABC-DEF"
+     * @endcode
      */
     static std::string ToUpper( std::string_view str );
     /**
@@ -312,6 +487,14 @@ public:
      *
      * @param str 字符串
      * @return std::string
+     *
+     * @code{.cpp}
+     *   auto result = ToLower("Hello World");
+     *   // result = "hello world"
+     *
+     *   auto result2 = ToLower("ABC-DEF");
+     *   // result2 = "abc-def"
+     * @endcode
      */
     static std::string ToLower( std::string_view str );
     /**
@@ -321,6 +504,14 @@ public:
      * @param prefix
      * @return true
      * @return false
+     *
+     * @code{.cpp}
+     *   bool result = StartWith("HelloWorld", "Hello");
+     *   // result = true
+     *
+     *   bool result2 = StartWith("HelloWorld", "World");
+     *   // result2 = false
+     * @endcode
      */
     static bool StartWith( std::string_view str, std::string_view prefix );
     /**
@@ -330,6 +521,14 @@ public:
      * @param suffix
      * @return true
      * @return false
+     *
+     * @code{.cpp}
+     *   bool result = EndWith("HelloWorld", "World");
+     *   // result = true
+     *
+     *   bool result2 = EndWith("HelloWorld", "Hello");
+     *   // result2 = false
+     * @endcode
      */
     static bool EndWith( std::string_view str, std::string_view suffix );
     /**
@@ -339,6 +538,14 @@ public:
      * @param token
      * @return true
      * @return false
+     *
+     * @code{.cpp}
+     *   bool result = Contains("HelloWorld", "World");
+     *   // result = true
+     *
+     *   bool result2 = Contains("HelloWorld", "xyz");
+     *   // result2 = false
+     * @endcode
      */
     static bool Contains( std::string_view str, std::string_view token ) noexcept;
     /**
@@ -347,6 +554,14 @@ public:
      * @param data 数据
      * @param separator 分隔符
      * @return std::string
+     *
+     * @code{.cpp}
+     *   auto result = ConvertToHexStr("ABC");
+     *   // result = "41 42 43"
+     *
+     *   auto result2 = ConvertToHexStr("123", ':');
+     *   // result2 = "31:32:33"
+     * @endcode
      */
     static std::string ConvertToHexStr( std::string_view data, char separator = ' ' );
     /**
@@ -356,6 +571,14 @@ public:
      * @param str2 第二个字符串
      * @return true 如果两个字符串相等（忽略大小写）
      * @return false 如果两个字符串不相等
+     *
+     * @code{.cpp}
+     *   bool result = EqualsIgnoreCase("Hello", "hello");
+     *   // result = true
+     *
+     *   bool result2 = EqualsIgnoreCase("Hello", "world");
+     *   // result2 = false
+     * @endcode
      */
     static bool EqualsIgnoreCase( std::string_view str1, std::string_view str2 ) noexcept;
     /**
@@ -364,6 +587,14 @@ public:
      * @param value 数值
      * @param count 二进制位数
      * @return std::string
+     *
+     * @code{.cpp}
+     *   auto result = IntToBitString(5, 8);
+     *   // result = "00000101"
+     *
+     *   auto result2 = IntToBitString(255, 8);
+     *   // result2 = "11111111"
+     * @endcode
      */
     static std::string IntToBitString( uint64_t value, int count ) noexcept;
     /**
@@ -381,13 +612,25 @@ public:
      * - 对于任何非合法数字格式的输入（除空白外），均返回 std::nullopt
      * - 浮点数不保证支持 "inf" 或 "nan"
      *
-     * @example
-     *   ToNumber<int>("42") = 42
-     *   ToNumber<int>("  0xFF ") = 255
-     *   ToNumber<double>("3.14") = 3.14
-     *   ToNumber<int>("") = nullopt
-     *   ToNumber<int>("abc") = nullopt
-     *   ToNumber<int>("123abc") = nullopt （非完全解析）
+     * @code{.cpp}
+     *   auto result = ToNumber<int>("42");
+     *   // result = 42
+     *
+     *   auto result2 = ToNumber<int>("  0xFF ");
+     *   // result2 = 255
+     *
+     *   auto result3 = ToNumber<double>("3.14");
+     *   // result3 = 3.14
+     *
+     *   auto result4 = ToNumber<int>("");
+     *   // result4 = std::nullopt
+     *
+     *   auto result5 = ToNumber<int>("abc");
+     *   // result5 = std::nullopt
+     *
+     *   auto result6 = ToNumber<int>("123abc");
+     *   // result6 = std::nullopt
+     * @endcode
      */
     template <typename T>
     static std::optional<T> ToNumber( std::string_view str ) noexcept {
@@ -437,6 +680,20 @@ public:
      * @param base 整型进制（仅整型有效），可选 8、10、16；默认 10
      * @param precision 小数位数（仅浮点型有效），-1 表示自动精度（%g），>=0 表示固定小数位（%f）
      * @return std::string 转换成功则返回结果；失败（如参数非法、缓冲区溢出等）则返回空字符串 ""
+     *
+     * @code{.cpp}
+     *   auto result = FromNumber<int>(42);
+     *   // result = "42"
+     *
+     *   auto result2 = FromNumber<int>(42, 16);
+     *   // result2 = "2a"
+     *
+     *   auto result3 = FromNumber<double>(3.14159, 10, 2);
+     *   // result3 = "3.14"
+     *
+     *   auto result4 = FromNumber<double>(3.14159, 10, -1);
+     *   // result4 = "3.14159" (自动格式)
+     * @endcode
      */
     template <typename T>
     static std::string FromNumber( T value, int base = 10, int precision = -1 ) noexcept {
@@ -489,6 +746,17 @@ public:
      * @param include_start 返回值是否包含起始字符串
      * @param include_end 返回值是否包含结束字符串
      * @return std::optional<std::string>
+     *
+     * @code{.cpp}
+     *   auto result = ExtractBetween("abc-def-ghi", "abc", "ghi");
+     *   // result = "-def-"
+     *
+     *   auto result2 = ExtractBetween("abc-def-ghi", "abc-", "-ghi");
+     *   // result2 = "def"
+     *
+     *   auto result3 = ExtractBetween("abc", "cd", "ef");
+     *   // result3 = std::nullopt
+     * @endcode
      */
     static std::optional<std::string_view> ExtractBetween( std::string_view str, std::string_view start,
                                                            std::string_view end, bool include_start = false,
@@ -506,6 +774,15 @@ public:
      *
      * @return 匹配成功时返回 std::optional<std::string> 含值状态；
      *         否则返回 std::nullopt（可能是无匹配或正则非法）
+     *
+     * @code{.cpp}
+     *   auto result = ExtractFirst("abc123def456", R"(\d+)");
+     *   // result = "123"
+     *
+     *   auto result2 = ExtractFirst("email: test@example.com",
+     *                                                  R"([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})");
+     *   // result2 = "test@example.com"
+     * @endcode
      */
     static std::optional<std::string> ExtractFirst( std::string_view text, std::string_view pattern,
                                                     std::string *error_msg = nullptr );
@@ -523,6 +800,14 @@ public:
      * @return 成功提取则返回字符串；若无匹配、越界或正则错误则返回 nullopt
      *
      * @note 如果 group_index >= match.size()，会设置越界错误信息
+     *
+     * @code{.cpp}
+     *   auto result = ExtractGroup("Version 1.2.3", R"((\d+)\.(\d+)\.(\d+))", 1);
+     *   // result = "1"
+     *
+     *   auto result2 = ExtractGroup("Version 1.2.3", R"((\d+)\.(\d+)\.(\d+))", 2);
+     *   // result2 = "2"
+     * @endcode
      */
     static std::optional<std::string> ExtractGroup( std::string_view text, std::string_view pattern,
                                                     size_t group_index = 1, std::string *error_msg = nullptr );
@@ -538,6 +823,14 @@ public:
      *
      * @return 匹配到的所有字符串组成的 vector；
      *         若正则无效则返回空 vector，并通过 error_msg 通知错误
+     *
+     * @code{.cpp}
+     *   auto result = ExtractAll("abc123def456ghi789", R"(\d+)");
+     *   // result = {"123", "456", "789"}
+     *
+     *   auto result2 = ExtractAll("the quick brown fox", R"(\b\w{4}\b)");
+     *   // result2 = {"over", "lazy"} (假设输入是"the quick brown fox jumps over the lazy dog")
+     * @endcode
      */
     static std::vector<std::string> ExtractAll( std::string_view text, std::string_view pattern,
                                                 std::string *error_msg = nullptr );
@@ -554,6 +847,16 @@ public:
      *
      * @return 所有成功提取的捕获组字符串列表；
      *         若正则本身错误则返回空列表
+     *
+     * @code{.cpp}
+     *   auto result = ExtractAllGroups("Date: 2023-12-25, Date: 2024-01-01",
+     *                                                     R"((\d{4})-(\d{2})-(\d{2}))", 1);
+     *   // result = {"2023", "2024"}
+     *
+     *   auto result2 = ExtractAllGroups("Date: 2023-12-25, Date: 2024-01-01",
+     *                                                      R"((\d{4})-(\d{2})-(\d{2}))", 2);
+     *   // result2 = {"12", "01"}
+     * @endcode
      */
     static std::vector<std::string> ExtractAllGroups( std::string_view text, std::string_view pattern,
                                                       size_t group_index = 1, std::string *error_msg = nullptr );
@@ -563,6 +866,14 @@ public:
      * @param width 目标长度
      * @param fill_char 填充字符
      * @return 填充后的字符串
+     *
+     * @code{.cpp}
+     *   auto result = PadLeft("test", 8);
+     *   // result = "    test"
+     *
+     *   auto result2 = PadLeft("test", 8, '0');
+     *   // result2 = "0000test"
+     * @endcode
      */
     [[nodiscard]] static std::string PadLeft( std::string_view str, size_t width, char fill_char = ' ' ) noexcept;
     /**
@@ -571,6 +882,14 @@ public:
      * @param width 目标长度
      * @param fill_char 填充字符
      * @return 填充后的字符串
+     *
+     * @code{.cpp}
+     *   auto result = PadRight("test", 8);
+     *   // result = "test    "
+     *
+     *   auto result2 = PadRight("test", 8, '0');
+     *   // result2 = "test0000"
+     * @endcode
      */
     [[nodiscard]] static std::string PadRight( std::string_view str, size_t width, char fill_char = ' ' ) noexcept;
     /**
@@ -578,6 +897,14 @@ public:
      * @param length 字符串长度
      * @param charset 字符集
      * @return 随机字符串
+     *
+     * @code{.cpp}
+     *   auto result = RandomString(10);
+     *   // result = 长度为10的随机字符串，例如 "aB3fG9hK2m"
+     *
+     *   auto result2 = RandomString(5, "0123456789");
+     *   // result2 = 长度为5的随机数字字符串，例如 "57291"
+     * @endcode
      */
     [[nodiscard]] static std::string RandomString(
         size_t           length,
@@ -586,20 +913,98 @@ public:
      * @brief 检查字符串是否为数字
      * @param str 输入字符串
      * @return 是否为数字
+     *
+     * @code{.cpp}
+     *   bool result = IsNumeric("123");
+     *   // result = true
+     *
+     *   bool result2 = IsNumeric("-123.45");
+     *   // result2 = true
+     *
+     *   bool result3 = IsNumeric("abc");
+     *   // result3 = false
+     * @endcode
      */
     static bool IsNumeric( std::string_view str ) noexcept;
     /**
      * @brief 检查字符串是否全为大写
      * @param str 输入字符串
      * @return 是否全为大写
+     *
+     * @code{.cpp}
+     *   bool result = IsUpper("ABC");
+     *   // result = true
+     *
+     *   bool result2 = IsUpper("AbC");
+     *   // result2 = false
+     *
+     *   bool result3 = IsUpper("123");
+     *   // result3 = false
+     * @endcode
      */
     static bool IsUpper( std::string_view str ) noexcept;
     /**
      * @brief 检查字符串是否全为小写
      * @param str 输入字符串
      * @return 是否全为小写
+     *
+     * @code{.cpp}
+     *   bool result = IsLower("abc");
+     *   // result = true
+     *
+     *   bool result2 = IsLower("Abc");
+     *   // result2 = false
+     *
+     *   bool result3 = IsLower("123");
+     *   // result3 = false
+     * @endcode
      */
     static bool IsLower( std::string_view str ) noexcept;
+    /**
+     * @brief 将驼峰命名（CamelCase）转换为蛇形命名（snake_case）
+     *
+     * - 大写字母前插入下划线（除非是首字母）
+     * - 全部转为小写
+     * - 连续大写字母视为一个词（如 "XMLParser" → "xml_parser"）
+     *
+     * @param str 输入的驼峰字符串
+     * @return 转换后的蛇形字符串
+     *
+     * @code{.cpp}
+     *   auto result = CamelToSnake("myVariableName");
+     *   // result = "my_variable_name"
+     *
+     *   auto result2 = CamelToSnake("XMLParser");
+     *   // result2 = "xml_parser"
+     *
+     *   auto result3 = CamelToSnake("URL");
+     *   // result3 = "url"
+     * @endcode
+     */
+    [[nodiscard]] static std::string CamelToSnake( std::string_view str ) noexcept;
+    /**
+     * @brief 将蛇形命名（snake_case）转换为驼峰命名（CamelCase）
+     *
+     * - 下划线后的首字母大写
+     * - 首字母是否大写由 upper_first 控制
+     * - 忽略连续下划线（视为一个分隔符）
+     *
+     * @param str 输入的蛇形字符串
+     * @param upper_first 若为 true，则首字母大写（PascalCase）；否则小写（camelCase）
+     * @return 转换后的驼峰字符串
+     *
+     * @code{.cpp}
+     *   auto result = SnakeToCamel("my_variable_name", false);
+     *   // result = "myVariableName"
+     *
+     *   auto result2 = SnakeToCamel("my_variable_name", true);
+     *   // result2 = "MyVariableName"
+     *
+     *   auto result3 = SnakeToCamel("__a__b__", false);
+     *   // result3 = "aB"
+     * @endcode
+     */
+    [[nodiscard]] static std::string SnakeToCamel( std::string_view str, bool upper_first = false ) noexcept;
 
 private:
     /// 清除错误输出缓冲区

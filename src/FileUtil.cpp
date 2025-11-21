@@ -1,5 +1,4 @@
 #include "FileUtil.h"
-#include <filesystem>
 #include <iostream>
 
 namespace fs = std::filesystem;
@@ -189,7 +188,7 @@ void File::InitPermission() {
     permissions_ = result;
 }
 
-bool FileUtil::Exists( const std::string &path ) {
+bool FileUtil::Exists( std::string_view path ) noexcept {
     try {
         return fs::exists( path );
     }
@@ -198,7 +197,7 @@ bool FileUtil::Exists( const std::string &path ) {
     }
 }
 
-bool FileUtil::Remove( const std::string &path ) {
+bool FileUtil::Remove( std::string_view path ) noexcept {
     try {
         return fs::remove( path );
     }
@@ -207,23 +206,32 @@ bool FileUtil::Remove( const std::string &path ) {
     }
 }
 
-uint32_t FileUtil::RemoveAll( const std::string &path ) {
+uint32_t FileUtil::RemoveAll( std::string_view path ) noexcept {
     try {
-        return fs::remove_all( path );
+        return static_cast<uint32_t>( fs::remove_all( path ) );
     }
     catch ( const fs::filesystem_error & ) {
         return 0;
     }
 }
 
-std::string FileUtil::CleanPath( const std::string &path ) {
-    if ( !path.empty() && path.back() == '/' ) {
-        return path.substr( 0, path.size() - 1 );
+std::string FileUtil::CleanPath( std::string_view path ) noexcept {
+    if ( path.empty() ) {
+        return {};
     }
-    return path;
+
+    fs::path    p( path );
+    std::string result = p.string();
+
+    // 移除末尾的分隔符，但要保留根目录的分隔符
+    while ( result.length() > 1 && ( result.back() == '/' || result.back() == '\\' ) ) {
+        result.pop_back();
+    }
+
+    return result;
 }
 
-std::string FileUtil::Load2Str( const std::string &file_path ) noexcept {
+std::string FileUtil::Load2Str( std::string_view file_path ) noexcept {
     std::error_code ec;
     const auto      file_size = fs::file_size( file_path, ec );
     if ( ec || !fs::is_regular_file( file_path ) ) {
@@ -233,20 +241,16 @@ std::string FileUtil::Load2Str( const std::string &file_path ) noexcept {
     std::string content;
     content.resize( file_size );
 
-    std::ifstream file( file_path, std::ios::binary );
+    std::ifstream file( file_path.data(), std::ios::binary );
     if ( !file ) {
         return {};
     }
 
     file.read( content.data(), static_cast<std::streamsize>( file_size ) );
-    if ( !file.good() ) {
-        return {};
-    }
-
-    return content;
+    return file.good() ? content : std::string{};
 }
 
-std::vector<uint8_t> FileUtil::Load2ByteArray( const std::string &file_path ) noexcept {
+std::vector<uint8_t> FileUtil::Load2ByteArray( std::string_view file_path ) noexcept {
     std::error_code ec;
     const auto      file_size = fs::file_size( file_path, ec );
     if ( ec || !fs::is_regular_file( file_path ) ) {
@@ -254,20 +258,247 @@ std::vector<uint8_t> FileUtil::Load2ByteArray( const std::string &file_path ) no
     }
 
     std::vector<uint8_t> buffer;
-    buffer.reserve( file_size );
     buffer.resize( file_size );
 
-    std::ifstream file( file_path, std::ios::binary );
+    std::ifstream file( file_path.data(), std::ios::binary );
     if ( !file ) {
         return {};
     }
 
     file.read( reinterpret_cast<char *>( buffer.data() ), static_cast<std::streamsize>( file_size ) );
-    if ( !file.good() ) {
-        return {};
-    }
-
-    return buffer;
+    return file.good() ? buffer : std::vector<uint8_t>{};
 }
 
+bool FileUtil::CreateDirectories( std::string_view path ) noexcept {
+    try {
+        return fs::create_directories( path );
+    }
+    catch ( const fs::filesystem_error & ) {
+        return false;
+    }
+}
+
+bool FileUtil::CreateDirectory( std::string_view path ) noexcept {
+    try {
+        return fs::create_directory( path );
+    }
+    catch ( const fs::filesystem_error & ) {
+        return false;
+    }
+}
+
+bool FileUtil::Copy( std::string_view from, std::string_view to, bool overwrite ) noexcept {
+    try {
+        if ( !fs::exists( from ) ) {
+            return false;
+        }
+        if ( fs::exists( to ) && !overwrite ) {
+            return false;
+        }
+        fs::copy_options opts = overwrite ? fs::copy_options::overwrite_existing : fs::copy_options::none;
+        fs::copy( from, to, opts );
+        return true;
+    }
+    catch ( const fs::filesystem_error & ) {
+        return false;
+    }
+}
+
+bool FileUtil::Move( std::string_view from, std::string_view to, bool overwrite ) noexcept {
+    try {
+        const fs::path src( from ), dst( to );
+        if ( overwrite && fs::exists( dst ) ) {
+            fs::remove_all( dst );
+        }
+        else if ( fs::exists( dst ) ) {
+            return false;
+        }
+        fs::rename( src, dst );
+        return true;
+    }
+    catch ( const fs::filesystem_error & ) {
+        // fallback: copy + remove
+        try {
+            fs::copy( from, to, fs::copy_options::recursive );
+            fs::remove_all( from );
+            return true;
+        }
+        catch ( ... ) {
+            return false;
+        }
+    }
+}
+
+std::string FileUtil::DirName( std::string_view path ) noexcept {
+    try {
+        return fs::path( path ).parent_path().string();
+    }
+    catch ( ... ) {
+        return "";
+    }
+}
+
+std::string FileUtil::BaseName( std::string_view path ) noexcept {
+    try {
+        return fs::path( path ).filename().string();
+    }
+    catch ( ... ) {
+        return "";
+    }
+}
+
+std::string FileUtil::Extension( std::string_view path ) noexcept {
+    try {
+        return fs::path( path ).extension().string();
+    }
+    catch ( ... ) {
+        return "";
+    }
+}
+
+std::string FileUtil::Stem( std::string_view path ) noexcept {
+    try {
+        return fs::path( path ).stem().string();
+    }
+    catch ( ... ) {
+        return "";
+    }
+}
+
+bool FileUtil::IsFile( std::string_view path ) noexcept {
+    try {
+        return fs::is_regular_file( path );
+    }
+    catch ( ... ) {
+        return false;
+    }
+}
+
+bool FileUtil::IsDirectory( std::string_view path ) noexcept {
+    try {
+        return fs::is_directory( path );
+    }
+    catch ( ... ) {
+        return false;
+    }
+}
+
+uint64_t FileUtil::FileSize( std::string_view path ) noexcept {
+    std::error_code ec;
+    auto            size = fs::file_size( path, ec );
+    return ec ? 0 : size;
+}
+
+std::vector<std::string> FileUtil::ListDir( std::string_view path, bool include_hidden ) noexcept {
+    std::vector<std::string> result;
+    try {
+        for ( const auto &entry : fs::directory_iterator( path ) ) {
+            std::string name = entry.path().filename().string();
+            if ( !include_hidden && !name.empty() && name[0] == '.' ) {
+                continue;
+            }
+            result.push_back( std::move( name ) );
+        }
+    }
+    catch ( ... ) {
+    }
+    return result;
+}
+
+std::vector<std::string> FileUtil::ListDirFullPaths( std::string_view path, bool include_hidden ) noexcept {
+    std::vector<std::string> result;
+    try {
+        for ( const auto &entry : fs::directory_iterator( path ) ) {
+            std::string name = entry.path().filename().string();
+            if ( !include_hidden && !name.empty() && name[0] == '.' ) {
+                continue;
+            }
+            result.push_back( entry.path().string() );
+        }
+    }
+    catch ( ... ) {
+    }
+    return result;
+}
+
+bool FileUtil::IsAbsolutePath( std::string_view path ) noexcept {
+    try {
+        return fs::path( path ).is_absolute();
+    }
+    catch ( ... ) {
+        return false;
+    }
+}
+
+bool FileUtil::WriteStr( std::string_view file_path, std::string_view content, bool append ) noexcept {
+    std::ofstream file( std::string( file_path ), append ? std::ios::app : std::ios::trunc );
+    if ( !file ) {
+        return false;
+    }
+    file.write( content.data(), static_cast<std::streamsize>( content.size() ) );
+    return file.good();
+}
+
+bool FileUtil::WriteBytes( std::string_view file_path, const std::vector<uint8_t> &data, bool append ) noexcept {
+    std::ofstream file( std::string( file_path ), std::ios::binary | ( append ? std::ios::app : std::ios::trunc ) );
+    if ( !file ) {
+        return false;
+    }
+    if ( !data.empty() ) {
+        file.write( reinterpret_cast<const char *>( data.data() ), static_cast<std::streamsize>( data.size() ) );
+    }
+    return file.good();
+}
+
+std::string FileUtil::GetSystemTempDir() noexcept {
+    try {
+        return fs::temp_directory_path().string();
+    }
+    catch ( ... ) {
+        return "/tmp";  // fallback
+    }
+}
+
+std::string FileUtil::CreateTempFile( std::string_view prefix, std::string_view suffix,
+                                      std::string_view dir ) noexcept {
+    std::string temp_dir = dir.empty() ? GetSystemTempDir() : std::string( dir );
+    fs::path    temp_path( temp_dir );
+
+    auto now = std::chrono::high_resolution_clock::now();
+    auto ns  = std::chrono::duration_cast<std::chrono::nanoseconds>( now.time_since_epoch() ).count();
+
+    temp_path /= ( std::string( prefix ) + "_" + std::to_string( ns ) + std::string( suffix ) );
+
+    try {
+        std::ofstream file( temp_path, std::ios::out );
+        if ( file ) {
+            file.close();
+            return temp_path.string();
+        }
+    }
+    catch ( ... ) {
+    }
+
+    return "";  // 失败
+}
+
+std::string FileUtil::CreateTempDirectory( std::string_view prefix, std::string_view parent_dir ) noexcept {
+    std::string parent = parent_dir.empty() ? GetSystemTempDir() : std::string( parent_dir );
+    fs::path    dir( parent );
+
+    auto now = std::chrono::high_resolution_clock::now();
+    auto ns  = std::chrono::duration_cast<std::chrono::nanoseconds>( now.time_since_epoch() ).count();
+
+    dir /= ( std::string( prefix ) + "_" + std::to_string( ns ) );
+
+    try {
+        if ( fs::create_directory( dir ) ) {
+            return dir.string();
+        }
+    }
+    catch ( ... ) {
+    }
+
+    return "";
+}
 }  // namespace utils
