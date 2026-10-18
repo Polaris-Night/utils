@@ -5,7 +5,7 @@
 inline constexpr bool is_windows = true;
     #define PLATFORM_OS_WINDOWS 1
 #else
-static inline constexpr bool is_windows = false;
+inline constexpr bool is_windows = false;
 #endif
 
 #if defined( __linux__ )

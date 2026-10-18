@@ -1,12 +1,15 @@
-macro(build_breakpad BREAKPAD_ROOT_DIR)
+# breakpad 在类 UNIX 下含 .S 汇编源：在本模块被 include 的目录作用域启用 ASM
+# （注意：不能放进下面的 function —— enable_language 的内部变量会被函数作用域吞掉）
+if (UNIX)
+    enable_language(ASM)
+endif()
+
+function(build_breakpad BREAKPAD_ROOT_DIR)
     if (WIN32)
-        add_definitions(-D_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
-                        -DUNICODE
-                        -D_UNICODE)
-    elseif(UNIX)
-        add_definitions(-DHAVE_A_OUT_H)
-        enable_language(ASM)
-    else()
+        set(BREAKPAD_DEFS -D_SILENCE_STDEXT_HASH_DEPRECATION_WARNINGS
+                         -DUNICODE
+                         -D_UNICODE)
+    elseif(NOT UNIX)
         message(FATAL_ERROR "Not support system ${CMAKE_SYSTEM_NAME}")
     endif()
 
@@ -22,9 +25,11 @@ macro(build_breakpad BREAKPAD_ROOT_DIR)
         message(FATAL_ERROR "Not support system ${CMAKE_SYSTEM_NAME}")
     endif()
 
-    # disasm
-    file(GLOB DISASM_SRC ${BREAKPAD_SRC_DIR}/third_party/libdisasm/*.c ${BREAKPAD_SRC_DIR}/third_party/libdisasm/*.h)
-    add_library(disasm STATIC ${DISASM_SRC})
+    # disasm（仅符号化工具使用）
+    if (UTILS_BUILD_BREAKPAD_TOOLS AND UNIX)
+        file(GLOB DISASM_SRC ${BREAKPAD_SRC_DIR}/third_party/libdisasm/*.c ${BREAKPAD_SRC_DIR}/third_party/libdisasm/*.h)
+        add_library(disasm STATIC ${DISASM_SRC})
+    endif()
 
     # common
     file(GLOB BREAKPAD_COMMON_SRC
@@ -43,9 +48,15 @@ macro(build_breakpad BREAKPAD_ROOT_DIR)
         list(APPEND BREAKPAD_COMMON_SRC ${BREAKPAD_COMMON_SRC_DIR}/breakpad_getcontext.S)
     endif()
     add_library(breakpad_common STATIC ${BREAKPAD_COMMON_SRC})
-    target_include_directories(breakpad_common PUBLIC ${BREAKPAD_SRC_DIR})
+    # SYSTEM：第三方头文件不产生告警（本工程自己的目标仍启用完整告警集）
+    target_include_directories(breakpad_common SYSTEM PUBLIC ${BREAKPAD_SRC_DIR})
     if (UNIX)
+        # HAVE_A_OUT_H 由 common/stabs_reader.h 使用；PUBLIC 使 client 与各工具自动继承
+        target_compile_definitions(breakpad_common PUBLIC HAVE_A_OUT_H)
         target_link_libraries(breakpad_common PRIVATE pthread)
+    endif()
+    if (WIN32)
+        target_compile_definitions(breakpad_common PUBLIC ${BREAKPAD_DEFS})
     endif()
 
     # client
@@ -62,7 +73,13 @@ macro(build_breakpad BREAKPAD_ROOT_DIR)
     list(REMOVE_ITEM BREAKPAD_CLIENT_SRC ${BREAKPAD_CLIENT_TEST_SRC} ${BREAKPAD_CLIENT_SRC_DIR}/sender/google_crash_report_sender.cc)
     add_library(breakpad_client STATIC ${BREAKPAD_CLIENT_SRC})
     target_link_libraries(breakpad_client PUBLIC breakpad_common)
-    target_include_directories(breakpad_client PUBLIC ${BREAKPAD_SRC_DIR})
+    target_include_directories(breakpad_client SYSTEM PUBLIC ${BREAKPAD_SRC_DIR})
+    if (WIN32)
+        target_compile_definitions(breakpad_client PRIVATE ${BREAKPAD_DEFS})
+    endif()
+
+    # ==== 以下为符号化工具：默认不构建（UTILS_BUILD_BREAKPAD_TOOLS=ON 时启用）====
+    if (UTILS_BUILD_BREAKPAD_TOOLS AND UNIX)
 
     # dump_syms in linux
     set(BREAKPAD_DUMP_SYMS_SRC
@@ -88,8 +105,6 @@ macro(build_breakpad BREAKPAD_ROOT_DIR)
         ${BREAKPAD_SRC_DIR}/common/linux/linux_libc_support.cc
         ${BREAKPAD_SRC_DIR}/common/linux/memory_mapped_file.cc
         ${BREAKPAD_SRC_DIR}/common/linux/safe_readlink.cc
-        ${BREAKPAD_SRC_DIR}/common/linux/elf_symbols_to_module.cc
-        ${BREAKPAD_SRC_DIR}/common/linux/elf_symbols_to_module.cc
     )
     add_executable(dump_syms ${BREAKPAD_DUMP_SYMS_SRC})
     target_link_libraries(dump_syms PRIVATE breakpad_common z)
@@ -187,7 +202,12 @@ macro(build_breakpad BREAKPAD_ROOT_DIR)
     target_link_libraries(minidump_module_reader PRIVATE breakpad_common disasm)
     target_include_directories(minidump_module_reader PUBLIC ${BREAKPAD_SRC_DIR})
 
-    install(TARGETS breakpad_client dump_syms minidump_stackwalk minidump_module_reader)
+    endif()  # UTILS_BUILD_BREAKPAD_TOOLS
+
+    install(TARGETS breakpad_client)
+    if (UTILS_BUILD_BREAKPAD_TOOLS AND UNIX)
+        install(TARGETS dump_syms minidump_stackwalk minidump_module_reader)
+    endif()
 
     install(
         DIRECTORY
@@ -199,4 +219,4 @@ macro(build_breakpad BREAKPAD_ROOT_DIR)
         DESTINATION include/breakpad
         FILES_MATCHING PATTERN "*.h"
     )
-endmacro()
+endfunction()

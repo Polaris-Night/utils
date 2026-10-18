@@ -1,7 +1,35 @@
 #include "FileUtil.h"
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
+#include <random>
+#include <set>
+#include <stack>
+
+#if defined( PLATFORM_OS_WINDOWS )
+#include <fcntl.h>
+#include <io.h>
+#include <sys/stat.h>
+#else
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 namespace fs = std::filesystem;
+
+namespace {
+
+// 生成 64 位随机十六进制串，用于临时文件/目录命名
+std::string RandomToken() {
+    thread_local static std::mt19937_64 gen{ std::random_device{}() };
+    char                                buf[17] = {};
+    std::snprintf( buf, sizeof( buf ), "%016llx", static_cast<unsigned long long>( gen() ) );
+    return buf;
+}
+
+}  // namespace
 
 namespace utils {
 
@@ -148,15 +176,40 @@ void File::Write( const char *data ) {
     f_ << data;
 }
 
+#if defined( __GNUC__ ) || defined( __clang__ )
+#    define UTILS_NO_SANITIZE_VPTR __attribute__( ( no_sanitize( "vptr" ) ) )
+#else
+#    define UTILS_NO_SANITIZE_VPTR
+#endif
+
+#if defined( __GLIBCXX__ )
+namespace {
+
+// libstdc++ 未公开 filebuf 的底层文件描述符，约定俗成的做法是派生 filebuf 后用 _M_file.fd() 取 fd。
+// 把 *rdbuf() 当作 Helper 使用在严格意义上是 UB（vptr 不匹配，Helper 不新增数据成员故布局一致），
+// 因此该访问刻意关闭 vptr 检查（只影响本函数，其余 UB 检查照旧生效）。
+class FilebufHelper : public std::filebuf {
+public:
+    int handle() { return _M_file.fd(); }
+};
+
+UTILS_NO_SANITIZE_VPTR
+int FilebufHandle( std::filebuf &buffer ) {
+    return static_cast<FilebufHelper &>( buffer ).handle();
+}
+
+}  // namespace
+#endif
+
 int File::Handle() {
-    class Helper : public std::filebuf {
-    public:
-        int handle() { return _M_file.fd(); }
-    };
     if ( !IsOpened() ) {
         return -1;
     }
-    return static_cast<Helper &>( *f_.rdbuf() ).handle();
+#if defined( __GLIBCXX__ )
+    return FilebufHandle( *f_.rdbuf() );
+#else
+    return -1;  // 其他标准库不保证提供获取底层句柄的方式
+#endif
 }
 
 void File::InitPermission() {
@@ -220,11 +273,20 @@ std::string FileUtil::CleanPath( std::string_view path ) noexcept {
         return {};
     }
 
-    fs::path    p( path );
-    std::string result = p.string();
+    std::string result( path );
 
-    // 移除末尾的分隔符，但要保留根目录的分隔符
-    while ( result.length() > 1 && ( result.back() == '/' || result.back() == '\\' ) ) {
+    // 移除末尾的多余分隔符，但要保留根目录分隔符
+#if defined( PLATFORM_OS_WINDOWS )
+    const auto is_separator = []( char c ) { return c == '/' || c == '\\'; };
+#else
+    const auto is_separator = []( char c ) { return c == '/'; };  // POSIX 下 '\\' 是合法文件名字符
+#endif
+    while ( result.length() > 1 && is_separator( result.back() ) ) {
+#if defined( PLATFORM_OS_WINDOWS )
+        if ( result.length() == 3 && result[1] == ':' ) {
+            break;  // 保留盘符根目录，如 "C:\"
+        }
+#endif
         result.pop_back();
     }
 
@@ -241,7 +303,8 @@ std::string FileUtil::Load2Str( std::string_view file_path ) noexcept {
     std::string content;
     content.resize( file_size );
 
-    std::ifstream file( file_path.data(), std::ios::binary );
+    // file_path 是 string_view，可能不保证以 '\0' 结尾，需构造 std::string
+    std::ifstream file( std::string( file_path ), std::ios::binary );
     if ( !file ) {
         return {};
     }
@@ -260,7 +323,8 @@ std::vector<uint8_t> FileUtil::Load2ByteArray( std::string_view file_path ) noex
     std::vector<uint8_t> buffer;
     buffer.resize( file_size );
 
-    std::ifstream file( file_path.data(), std::ios::binary );
+    // file_path 是 string_view，可能不保证以 '\0' 结尾，需构造 std::string
+    std::ifstream file( std::string( file_path ), std::ios::binary );
     if ( !file ) {
         return {};
     }
@@ -295,7 +359,13 @@ bool FileUtil::Copy( std::string_view from, std::string_view to, bool overwrite 
         if ( fs::exists( to ) && !overwrite ) {
             return false;
         }
-        fs::copy_options opts = overwrite ? fs::copy_options::overwrite_existing : fs::copy_options::none;
+        fs::copy_options opts = fs::copy_options::none;
+        if ( fs::is_directory( from ) ) {
+            opts |= fs::copy_options::recursive;  // 目录须递归复制整棵目录树
+        }
+        if ( overwrite ) {
+            opts |= fs::copy_options::overwrite_existing;
+        }
         fs::copy( from, to, opts );
         return true;
     }
@@ -306,20 +376,24 @@ bool FileUtil::Copy( std::string_view from, std::string_view to, bool overwrite 
 
 bool FileUtil::Move( std::string_view from, std::string_view to, bool overwrite ) noexcept {
     try {
-        const fs::path src( from ), dst( to );
-        if ( overwrite && fs::exists( dst ) ) {
-            fs::remove_all( dst );
-        }
-        else if ( fs::exists( dst ) ) {
+        // 源不存在时直接失败：不得删除已存在的目标路径
+        if ( !fs::exists( from ) ) {
             return false;
         }
-        fs::rename( src, dst );
+        if ( fs::exists( to ) ) {
+            if ( !overwrite ) {
+                return false;
+            }
+            fs::remove_all( to );
+        }
+        fs::rename( from, to );
         return true;
     }
     catch ( const fs::filesystem_error & ) {
-        // fallback: copy + remove
+        // rename 失败（如跨设备移动）时降级为“复制 + 删除源”
         try {
-            fs::copy( from, to, fs::copy_options::recursive );
+            fs::copy_options opts = fs::copy_options::recursive | fs::copy_options::overwrite_existing;
+            fs::copy( from, to, opts );
             fs::remove_all( from );
             return true;
         }
@@ -455,28 +529,46 @@ std::string FileUtil::GetSystemTempDir() noexcept {
         return fs::temp_directory_path().string();
     }
     catch ( ... ) {
-        return "/tmp";  // fallback
+#if defined( PLATFORM_OS_WINDOWS )
+        // Windows 下依次回退到 TEMP/TMP 环境变量
+        if ( const char *temp = std::getenv( "TEMP" ) ) {
+            return temp;
+        }
+        if ( const char *temp = std::getenv( "TMP" ) ) {
+            return temp;
+        }
+        return ".";
+#else
+        return "/tmp";  // POSIX 标准临时目录
+#endif
     }
 }
 
 std::string FileUtil::CreateTempFile( std::string_view prefix, std::string_view suffix,
                                       std::string_view dir ) noexcept {
     std::string temp_dir = dir.empty() ? GetSystemTempDir() : std::string( dir );
-    fs::path    temp_path( temp_dir );
+    fs::path    dir_path( temp_dir );
 
-    auto now = std::chrono::high_resolution_clock::now();
-    auto ns  = std::chrono::duration_cast<std::chrono::nanoseconds>( now.time_since_epoch() ).count();
+    // 随机命名 + 独占创建，同名冲突时重试
+    for ( int attempt = 0; attempt < 100; ++attempt ) {
+        fs::path candidate = dir_path / ( std::string( prefix ) + "_" + RandomToken() + std::string( suffix ) );
 
-    temp_path /= ( std::string( prefix ) + "_" + std::to_string( ns ) + std::string( suffix ) );
-
-    try {
-        std::ofstream file( temp_path, std::ios::out );
-        if ( file ) {
-            file.close();
-            return temp_path.string();
+#if defined( PLATFORM_OS_WINDOWS )
+        int fd = ::_open( candidate.string().c_str(), _O_CREAT | _O_EXCL | _O_WRONLY, _S_IREAD | _S_IWRITE );
+        if ( fd >= 0 ) {
+            ::_close( fd );
+            return candidate.string();
         }
-    }
-    catch ( ... ) {
+#else
+        int fd = ::open( candidate.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0600 );
+        if ( fd >= 0 ) {
+            ::close( fd );
+            return candidate.string();
+        }
+#endif
+        if ( errno != EEXIST ) {
+            break;  // 目录不存在、权限不足等错误，重试无意义
+        }
     }
 
     return "";  // 失败
@@ -484,21 +576,97 @@ std::string FileUtil::CreateTempFile( std::string_view prefix, std::string_view 
 
 std::string FileUtil::CreateTempDirectory( std::string_view prefix, std::string_view parent_dir ) noexcept {
     std::string parent = parent_dir.empty() ? GetSystemTempDir() : std::string( parent_dir );
-    fs::path    dir( parent );
+    fs::path    parent_path( parent );
 
-    auto now = std::chrono::high_resolution_clock::now();
-    auto ns  = std::chrono::duration_cast<std::chrono::nanoseconds>( now.time_since_epoch() ).count();
-
-    dir /= ( std::string( prefix ) + "_" + std::to_string( ns ) );
-
-    try {
-        if ( fs::create_directory( dir ) ) {
-            return dir.string();
+    // 随机命名 + 独占创建，目录已存在时重试
+    for ( int attempt = 0; attempt < 100; ++attempt ) {
+        fs::path        candidate = parent_path / ( std::string( prefix ) + "_" + RandomToken() );
+        std::error_code ec;
+        if ( fs::create_directory( candidate, ec ) ) {
+            return candidate.string();
+        }
+        if ( ec ) {
+            break;  // 权限不足、父目录不存在等错误，重试无意义
         }
     }
-    catch ( ... ) {
+
+    return "";  // 失败
+}
+
+void FileUtil::WalkDirectory( const std::string                                                      &root_path,
+                              std::function<void( const std::string &, const fs::directory_entry & )> callback,
+                              bool recursive, const std::vector<std::string> &include_files,
+                              const std::vector<std::string> &exclude_files,
+                              const std::vector<std::string> &include_extensions,
+                              const std::vector<std::string> &exclude_extensions ) {
+    // 验证路径是否存在且为目录
+    if ( !fs::exists( root_path ) ) {
+        throw std::invalid_argument( "Path does not exist: " + root_path );
+    }
+    if ( !fs::is_directory( root_path ) ) {
+        throw std::invalid_argument( "Path is not a directory: " + root_path );
     }
 
-    return "";
+    // 标准化路径
+    fs::path root = fs::weakly_canonical( root_path );
+
+    // 构建集合以加速查找
+    std::set<std::string> include_files_set( include_files.begin(), include_files.end() );
+    std::set<std::string> exclude_files_set( exclude_files.begin(), exclude_files.end() );
+    std::set<std::string> include_exts_set( include_extensions.begin(), include_extensions.end() );
+    std::set<std::string> exclude_exts_set( exclude_extensions.begin(), exclude_extensions.end() );
+
+    // 判断是否应包含该条目
+    auto should_include = [&]( const std::string &name, const std::string &ext ) -> bool {
+        if ( !include_files.empty() && include_files_set.find( name ) == include_files_set.end() ) {
+            return false;
+        }
+        if ( !exclude_files.empty() && exclude_files_set.find( name ) != exclude_files_set.end() ) {
+            return false;
+        }
+        if ( !include_extensions.empty() && include_exts_set.find( ext ) == include_exts_set.end() ) {
+            return false;
+        }
+        if ( !exclude_extensions.empty() && exclude_exts_set.find( ext ) != exclude_exts_set.end() ) {
+            return false;
+        }
+        return true;
+    };
+
+    // 使用栈进行DFS遍历
+    std::stack<fs::path> dir_stack;
+    dir_stack.push( root );
+
+    while ( !dir_stack.empty() ) {
+        fs::path current_dir = dir_stack.top();
+        dir_stack.pop();
+
+        try {
+            for ( const auto &entry : fs::directory_iterator( current_dir ) ) {
+                std::string name = entry.path().filename().string();
+                std::string ext  = entry.path().extension().string();
+
+                // 如果是文件且不符合过滤条件，则跳过
+                if ( !entry.is_directory() && !should_include( name, ext ) ) {
+                    continue;
+                }
+
+                // 执行回调
+                callback( entry.path().string(), entry );
+
+                // 若为目录且允许递归，则压入栈中
+                if ( entry.is_directory() && recursive ) {
+                    // 不进入指向目录的符号链接，避免符号链接环导致死循环
+                    std::error_code ec;
+                    if ( !entry.is_symlink( ec ) ) {
+                        dir_stack.push( entry.path() );
+                    }
+                }
+            }
+        }
+        catch ( const fs::filesystem_error &e ) {
+            throw std::runtime_error( "Error walking through directory: " + current_dir.string() + " - " + e.what() );
+        }
+    }
 }
 }  // namespace utils

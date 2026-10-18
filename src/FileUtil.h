@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "Macros.h"
@@ -38,8 +40,8 @@ public:
     };
 
 public:
-    explicit File() = default;
-    File( const std::string &name );
+    File() = default;
+    explicit File( const std::string &name );
     virtual ~File();
     DISABLE_COPY_MOVE( File )
 
@@ -133,7 +135,7 @@ public:
     /**
      * @brief 向文件写入数据
      *
-     * @param data
+     * @param data 以 '\0' 结尾的字符串；若数据包含 '\0'，请使用 Write(data, size)
      */
     void Write( const char *data );
 
@@ -242,18 +244,20 @@ public:
      * 支持删除非空目录树。若路径指向文件，则仅删除该文件。
      *
      * @param path 待删除的文件或目录路径
-     * @return uint32_t 成功删除的条目数量（文件 + 目录），失败返回 0
+     * @return uint32_t 成功删除的条目数量（文件 + 目录）；
+     *         失败返回 0。注意：路径本不存在时同样返回 0，调用方
+     *         可结合 Exists() 区分两种情况
      */
     [[maybe_unused]] static uint32_t RemoveAll( std::string_view path ) noexcept;
 
     /**
-     * @brief 清理路径尾部多余的分隔符（'/'）
+     * @brief 清理路径尾部多余的分隔符
      *
-     * 使用 `std::filesystem::path::string()` 自动规范化路径格式，
-     * 包括去除尾部斜杠、合并连续斜杠等。
+     * Linux/macOS 仅处理 '/'；Windows 同时处理 '/' 和 '\\'。
+     * 保留根目录分隔符（如 "/"），不合并中间连续斜杠。
      *
      * @param path 输入路径字符串
-     * @return std::string 规范化后的路径，尾部无多余分隔符
+     * @return std::string 去除尾部冗余分隔符后的路径
      */
     [[nodiscard]] static std::string CleanPath( std::string_view path ) noexcept;
 
@@ -469,7 +473,8 @@ public:
     /**
      * @brief 创建一个唯一的临时文件
      *
-     * 文件将被创建为空文件。命名采用高精度时间戳保证唯一性。
+     * 文件将被创建为空文件。命名由随机数保证唯一，并以独占方式原子创建
+     * （同名冲突时自动重试），不会覆盖已存在的文件。
      *
      * @param prefix 文件名前缀（默认 "tmp"）
      * @param suffix 文件名后缀（如 ".tmp"，可选）
@@ -482,7 +487,8 @@ public:
     /**
      * @brief 创建一个唯一的临时目录
      *
-     * 目录会被创建，但调用者需负责后续清理。
+     * 目录会被创建，但调用者需负责后续清理。命名由随机数保证唯一，
+     * 目录已存在时会自动重试，不会复用已存在的目录。
      *
      * @param prefix 目录名前缀（默认 "tmp"）
      * @param parent_dir 父目录路径（默认为系统临时目录）
@@ -490,6 +496,31 @@ public:
      */
     [[nodiscard]] static std::string CreateTempDirectory( std::string_view prefix     = "tmp",
                                                           std::string_view parent_dir = "" ) noexcept;
+
+    /**
+     * @brief 遍历指定目录，并对每个文件或目录项调用回调函数进行处理。
+     *
+     * @param root_path 目录路径，必须是一个有效的存在目录。
+     * @param callback 回调函数，接收两个参数：
+     *                 - item_path: 当前遍历项的完整路径（字符串）
+     *                 - entry: std::filesystem::directory_entry 对象，提供 is_directory(), status() 等方法
+     * @param recursive 是否递归遍历子目录，默认为false。
+     * @param include_files 要包含的文件名列表（如 {"readme.txt", "main.py"}），默认为空表示不限制。
+     * @param exclude_files 要排除的文件名列表，默认为空表示不排除任何文件。
+     * @param include_extensions 要包含的扩展名列表（如 {".py", ".cpp"}），默认为空表示不限制。
+     * @param exclude_extensions 要排除的扩展名列表（如 {".tmp", ".log"}），默认为空表示不排除。
+     *
+     * @note 递归遍历不会进入指向目录的符号链接，避免符号链接环导致死循环。
+     *
+     * @throws std::invalid_argument 当root_path不是有效目录时抛出。
+     * @throws std::runtime_error 当访问目录遇到权限等问题时抛出。
+     */
+    void WalkDirectory( const std::string                                                                   &root_path,
+                        std::function<void( const std::string &, const std::filesystem::directory_entry & )> callback,
+                        bool recursive = false, const std::vector<std::string> &include_files = {},
+                        const std::vector<std::string> &exclude_files      = {},
+                        const std::vector<std::string> &include_extensions = {},
+                        const std::vector<std::string> &exclude_extensions = {} );
 
 private:
     /**

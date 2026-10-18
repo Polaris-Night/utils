@@ -26,8 +26,11 @@ public:
     ResourceGuard( ResourceGuard &&other ) noexcept { *this = std::move( other ); }
     ResourceGuard &operator=( const ResourceGuard & ) = delete;
     ResourceGuard &operator=( ResourceGuard &&other ) noexcept {
-        resource_ = std::exchange( other.resource_, nullptr );
-        deleter_  = std::move( other.deleter_ );
+        if ( this != &other ) {
+            Reset();  // 先释放自身持有的资源，避免移动赋值时泄漏
+            resource_ = std::exchange( other.resource_, nullptr );
+            deleter_  = std::move( other.deleter_ );
+        }
         return *this;
     }
     ~ResourceGuard() {

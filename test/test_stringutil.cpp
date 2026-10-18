@@ -292,6 +292,10 @@ TEST( StringUtilTest, ConvertByteUnit ) {
 
     // 测试零值
     EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 0.0, "MB", "KB" ), 0.0 );
+
+    // 回归测试：0 值时也要先校验单位合法性
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 0.0, "XB", "KB" ), -1.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ConvertByteUnit( 0.0, "MB", "XB" ), -1.0 );
 }
 
 TEST( StringUtilTest, HumanizeBytes ) {
@@ -407,6 +411,13 @@ TEST( StringUtilTest, Trim ) {
 
     // 测试只有尾随空格
     EXPECT_EQ( utils::StringUtil::Trim( "test  " ), "test" );
+
+    // 回归测试：单字符结果曾被误判为空字符串（begin >= end 判断错误）
+    EXPECT_EQ( utils::StringUtil::Trim( "a" ), "a" );
+    EXPECT_EQ( utils::StringUtil::Trim( " a " ), "a" );
+    EXPECT_EQ( utils::StringUtil::Trim( "\ta\n" ), "a" );
+    EXPECT_EQ( utils::StringUtil::Trim( "\n x \r" ), "x" );
+    EXPECT_EQ( utils::StringUtil::Trim( "5" ), "5" );
 }
 
 TEST( StringUtilTest, Repeat ) {
@@ -419,10 +430,47 @@ TEST( StringUtilTest, Repeat ) {
 TEST( StringUtilTest, ToLowerAndUpper ) {
     std::string result;
 
+    // 基本功能测试
     result = utils::StringUtil::ToLower( "ABC-Def,G/h-123" );
     EXPECT_EQ( result, "abc-def,g/h-123" );
     result = utils::StringUtil::ToUpper( result );
     EXPECT_EQ( result, "ABC-DEF,G/H-123" );
+
+    // 空字符串测试
+    EXPECT_EQ( utils::StringUtil::ToLower( "" ), "" );
+    EXPECT_EQ( utils::StringUtil::ToUpper( "" ), "" );
+
+    // 全小写转大写
+    EXPECT_EQ( utils::StringUtil::ToUpper( "hello" ), "HELLO" );
+    EXPECT_EQ( utils::StringUtil::ToUpper( "world" ), "WORLD" );
+
+    // 全大写转小写
+    EXPECT_EQ( utils::StringUtil::ToLower( "HELLO" ), "hello" );
+    EXPECT_EQ( utils::StringUtil::ToLower( "WORLD" ), "world" );
+
+    // 混合大小写
+    EXPECT_EQ( utils::StringUtil::ToLower( "HeLLo WoRLd" ), "hello world" );
+    EXPECT_EQ( utils::StringUtil::ToUpper( "HeLLo WoRLd" ), "HELLO WORLD" );
+
+    // 数字和特殊字符（应保持不变）
+    EXPECT_EQ( utils::StringUtil::ToLower( "123!@#" ), "123!@#" );
+    EXPECT_EQ( utils::StringUtil::ToUpper( "123!@#" ), "123!@#" );
+
+    // UTF-8 多字节字符（应该保持不变，因为不是 ASCII 字母）
+    std::string utf8_str = "你好世界";  // UTF-8 编码的中文
+    EXPECT_EQ( utils::StringUtil::ToLower( utf8_str ), utf8_str );
+    EXPECT_EQ( utils::StringUtil::ToUpper( utf8_str ), utf8_str );
+
+    // 包含 UTF-8 字符的混合字符串
+    std::string mixed_utf8 = "Hello 世界";
+    EXPECT_EQ( utils::StringUtil::ToLower( mixed_utf8 ), "hello 世界" );
+    EXPECT_EQ( utils::StringUtil::ToUpper( mixed_utf8 ), "HELLO 世界" );
+
+    // 边界情况：只有一个字符
+    EXPECT_EQ( utils::StringUtil::ToLower( "A" ), "a" );
+    EXPECT_EQ( utils::StringUtil::ToUpper( "a" ), "A" );
+    EXPECT_EQ( utils::StringUtil::ToLower( "1" ), "1" );
+    EXPECT_EQ( utils::StringUtil::ToUpper( "1" ), "1" );
 }
 
 TEST( StringUtilTest, StartAndEndWith ) {
@@ -441,6 +489,46 @@ TEST( StringUtilTest, Contains ) {
     EXPECT_TRUE( utils::StringUtil::Contains( str, "Contains" ) );
     EXPECT_FALSE( utils::StringUtil::Contains( str, "contains" ) );
     EXPECT_FALSE( utils::StringUtil::Contains( str, "test-googleTest" ) );
+
+    // 测试空字符串
+    EXPECT_TRUE( utils::StringUtil::Contains( "hello", "" ) );
+    EXPECT_TRUE( utils::StringUtil::Contains( "", "" ) );
+    EXPECT_FALSE( utils::StringUtil::Contains( "", "hello" ) );
+
+    // 测试单个字符
+    EXPECT_TRUE( utils::StringUtil::Contains( "hello", "h" ) );
+    EXPECT_TRUE( utils::StringUtil::Contains( "hello", "o" ) );
+    EXPECT_FALSE( utils::StringUtil::Contains( "hello", "x" ) );
+
+    // 测试完整字符串
+    EXPECT_TRUE( utils::StringUtil::Contains( "hello", "hello" ) );
+    EXPECT_FALSE( utils::StringUtil::Contains( "hello", "hello world" ) );
+
+    // 测试特殊字符
+    EXPECT_TRUE( utils::StringUtil::Contains( "test@123", "@" ) );
+    EXPECT_TRUE( utils::StringUtil::Contains( "test@123", "123" ) );
+    EXPECT_FALSE( utils::StringUtil::Contains( "test@123", "!" ) );
+
+    // 测试重复字符
+    EXPECT_TRUE( utils::StringUtil::Contains( "aaaaa", "aa" ) );
+    EXPECT_TRUE( utils::StringUtil::Contains( "aaaaa", "aaa" ) );
+
+    // 测试包含 UTF-8 字符
+    std::string utf8_str = "Hello 世界";
+    EXPECT_TRUE( utils::StringUtil::Contains( utf8_str, "世界" ) );
+    EXPECT_TRUE( utils::StringUtil::Contains( utf8_str, "Hello" ) );
+    EXPECT_FALSE( utils::StringUtil::Contains( utf8_str, "天地" ) );
+
+    // 测试大小写敏感
+    EXPECT_TRUE( utils::StringUtil::Contains( "Hello", "H" ) );
+    EXPECT_FALSE( utils::StringUtil::Contains( "Hello", "h" ) );
+    EXPECT_TRUE( utils::StringUtil::Contains( "hello", "h" ) );
+
+    // 测试边界情况
+    EXPECT_TRUE( utils::StringUtil::Contains( "ab", "a" ) );
+    EXPECT_TRUE( utils::StringUtil::Contains( "ab", "b" ) );
+    EXPECT_TRUE( utils::StringUtil::Contains( "ab", "ab" ) );
+    EXPECT_FALSE( utils::StringUtil::Contains( "ab", "abc" ) );
 }
 
 TEST( StringUtilTest, ConvertToHex ) {
@@ -473,6 +561,30 @@ TEST( StringUtilTest, EqualsIgnoreCase ) {
     // 测试特殊字符
     EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "Hello, World!", "hello, world!" ) );
     EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "123ABC", "123abc" ) );
+
+    // 测试单个字符
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "A", "a" ) );
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "a", "A" ) );
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( "a", "b" ) );
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "1", "1" ) );
+
+    // 测试包含 UTF-8 字符的字符串（UTF-8 字符应该保持原样比较）
+    std::string utf8_str1 = "Hello 世界";
+    std::string utf8_str2 = "HELLO 世界";
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( utf8_str1, utf8_str2 ) );
+
+    // UTF-8 字符不同应该返回 false
+    std::string utf8_str3 = "Hello 世界";
+    std::string utf8_str4 = "Hello 天地";
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( utf8_str3, utf8_str4 ) );
+
+    // 测试混合 ASCII 和 UTF-8
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "test-TEST", "TEST-test" ) );
+    EXPECT_TRUE( utils::StringUtil::EqualsIgnoreCase( "TeSt123", "tEsT123" ) );
+
+    // 测试长度不同但内容相似的字符串
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( "HELLO", "HELLO " ) );
+    EXPECT_FALSE( utils::StringUtil::EqualsIgnoreCase( " HELLO", "HELLO" ) );
 }
 
 TEST( StringUtilTest, IntToBitString ) {
@@ -481,6 +593,12 @@ TEST( StringUtilTest, IntToBitString ) {
     EXPECT_EQ( utils::StringUtil::IntToBitString( -1, 8 ), "11111111" );
     EXPECT_EQ( utils::StringUtil::IntToBitString( 1234, 32 ), "00000000000000000000010011010010" );
     EXPECT_EQ( utils::StringUtil::IntToBitString( 0x33, 32 ), "00000000000000000000000000110011" );
+
+    // 边界测试：位数非法时不再做越界移位
+    EXPECT_EQ( utils::StringUtil::IntToBitString( 0xFF, 0 ), "" );
+    EXPECT_EQ( utils::StringUtil::IntToBitString( 0xFF, -3 ), "" );
+    EXPECT_EQ( utils::StringUtil::IntToBitString( 0xFFFFFFFFFFFFFFFFULL, 64 ), std::string( 64, '1' ) );
+    EXPECT_EQ( utils::StringUtil::IntToBitString( 1, 100 ), std::string( 63, '0' ) + "1" );
 }
 
 TEST( StringUtilTest, Extract ) {
@@ -679,48 +797,188 @@ TEST( StringUtilTest, RegexExtractAllGroups ) {
 }
 
 TEST( StringUtilTest, ToNumber ) {
-    // 测试整数转换
+    // ========== 整型测试 ==========
+
+    // 基本十进制转换
     EXPECT_EQ( utils::StringUtil::ToNumber<int>( "42" ).value_or( 0 ), 42 );
     EXPECT_EQ( utils::StringUtil::ToNumber<int>( "  42  " ).value_or( 0 ), 42 );
     EXPECT_EQ( utils::StringUtil::ToNumber<long>( "-123" ).value_or( 0 ), -123 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<long long>( "9223372036854775807" ).value_or( 0 ), 9223372036854775807LL );
+    EXPECT_EQ( utils::StringUtil::ToNumber<long long>( "-9223372036854775808" ).value_or( 0 ),
+               -9223372036854775807LL - 1 );
 
-    // 测试十六进制转换
+    // 十六进制转换
     EXPECT_EQ( utils::StringUtil::ToNumber<int>( "0xFF" ).value_or( 0 ), 255 );
     EXPECT_EQ( utils::StringUtil::ToNumber<int>( "  0xFF " ).value_or( 0 ), 255 );
-    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "  0xfF " ).value_or( 0 ), 255 );
-    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "fF" ).has_value() );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "0xfF" ).value_or( 0 ), 255 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "0XABCD" ).value_or( 0 ), 0xABCD );
+    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned int>( "0xFFFFFFFF" ).value_or( 0 ), 0xFFFFFFFF );
 
-    // 测试八进制转换
+    // 十六进制带正负号
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "-0xFF" ).value_or( 0 ), -255 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "-0xABCD" ).value_or( 0 ), -0xABCD );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "+0xFF" ).value_or( 0 ), 255 );
+    // -0xFFFFFFFFFFFFFFFF 的绝对值超过 LLONG_MAX，应该被拒绝
+    EXPECT_FALSE( utils::StringUtil::ToNumber<long long>( "-0xFFFFFFFFFFFFFFFF" ).has_value() );
+    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned long long>( "+0xFFFFFFFFFFFFFFFF" ).value_or( 0 ),
+               18446744073709551615ULL );
+
+    // 八进制转换
     EXPECT_EQ( utils::StringUtil::ToNumber<int>( "077" ).value_or( 0 ), 63 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "0123" ).value_or( 0 ), 83 );
 
-    // 测试浮点数转换
-    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "3.14" ).value_or( 0 ), 3.14 );
-    EXPECT_FLOAT_EQ( utils::StringUtil::ToNumber<float>( "2.5" ).value_or( 0 ), 2.5f );
-    EXPECT_FALSE( utils::StringUtil::ToNumber<float>( "2.5f" ).has_value() );
+    // 八进制带正负号
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "-077" ).value_or( 0 ), -63 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "-0123" ).value_or( 0 ), -83 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "+077" ).value_or( 0 ), 63 );
 
-    // 测试空字符串
-    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "" ).has_value() );
+    // 无符号整型
+    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned int>( "42" ).value_or( 0 ), 42u );
+    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned long>( "4294967295" ).value_or( 0 ), 4294967295u );
+    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned long long>( "18446744073709551615" ).value_or( 0 ),
+               18446744073709551615ULL );
 
-    // 测试无效字符
-    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "abc" ).has_value() );
-
-    // 测试部分匹配（应该失败）
-    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "123abc" ).has_value() );
-    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "12.34.56" ).has_value() );
-
-    // 测试边界值
+    // 边界值 - 零
     EXPECT_EQ( utils::StringUtil::ToNumber<int>( "0" ).value_or( 0 ), 0 );
     EXPECT_EQ( utils::StringUtil::ToNumber<int>( "-0" ).value_or( 0 ), 0 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned int>( "0" ).value_or( 0 ), 0u );
 
-    // 测试无符号类型
-    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned int>( "42" ).value_or( 0 ), 42u );
+    // 边界值 - int 极限
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "2147483647" ).value_or( 0 ), 2147483647 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "-2147483648" ).value_or( 0 ), -2147483647 - 1 );
 
-    // 验证ToNumber函数具有noexcept属性
+    // 边界值 - unsigned int 极限
+    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned int>( "4294967295" ).value_or( 0 ), 4294967295u );
+
+    // 整型溢出测试 - 应该失败
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "2147483648" ).has_value() );           // 超过 int 最大值
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "-2147483649" ).has_value() );          // 超过 int 最小值
+    EXPECT_FALSE( utils::StringUtil::ToNumber<unsigned int>( "4294967296" ).has_value() );  // 超过 unsigned int 最大值
+
+    // 短整型测试
+    EXPECT_EQ( utils::StringUtil::ToNumber<short>( "32767" ).value_or( 0 ), 32767 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<short>( "-32768" ).value_or( 0 ), -32768 );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<short>( "32768" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<short>( "-32769" ).has_value() );
+
+    EXPECT_EQ( utils::StringUtil::ToNumber<unsigned short>( "65535" ).value_or( 0 ), 65535 );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<unsigned short>( "65536" ).has_value() );
+
+    // ========== 浮点型测试 ==========
+
+    // 基本浮点数转换
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "3.14" ).value_or( 0 ), 3.14 );
+    EXPECT_FLOAT_EQ( utils::StringUtil::ToNumber<float>( "2.5" ).value_or( 0 ), 2.5f );
+    // long double 无对应的 EXPECT_*_EQ 宏（会退化到 double 比较），故直接精确比较
+    EXPECT_EQ( utils::StringUtil::ToNumber<long double>( "3.14159265358979323846" ).value_or( 0 ),
+               3.14159265358979323846L );
+
+    // 科学计数法
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "1.23e10" ).value_or( 0 ), 1.23e10 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "1.23E10" ).value_or( 0 ), 1.23e10 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "1.23e-10" ).value_or( 0 ), 1.23e-10 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "1.23E-10" ).value_or( 0 ), 1.23e-10 );
+    EXPECT_FLOAT_EQ( utils::StringUtil::ToNumber<float>( "1.5e-5" ).value_or( 0 ), 1.5e-5f );
+
+    // 浮点数边界值
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "0.0" ).value_or( 0 ), 0.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "-0.0" ).value_or( 0 ), 0.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( ".5" ).value_or( 0 ), 0.5 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "5." ).value_or( 0 ), 5.0 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "-.5" ).value_or( 0 ), -0.5 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "-5." ).value_or( 0 ), -5.0 );
+
+    // 浮点数精度
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "3.141592653589793" ).value_or( 0 ), 3.141592653589793 );
+    EXPECT_FLOAT_EQ( utils::StringUtil::ToNumber<float>( "3.141592653589793" ).value_or( 0 ), 3.141592653589793f );
+
+    // 浮点数极大极小值（接近但不等于极限）
+    EXPECT_TRUE( utils::StringUtil::ToNumber<double>( "1.7976931348623157e308" ).has_value() );
+    EXPECT_TRUE( utils::StringUtil::ToNumber<double>( "2.2250738585072014e-308" ).has_value() );
+
+    // 浮点数溢出测试 - 应该失败
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "1.8e309" ).has_value() );  // 超过 double 最大值
+    EXPECT_FALSE( utils::StringUtil::ToNumber<float>( "1e40" ).has_value() );      // 超过 float 最大值
+
+    // 浮点数带空白字符
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "  3.14  " ).value_or( 0 ), 3.14 );
+    EXPECT_DOUBLE_EQ( utils::StringUtil::ToNumber<double>( "\t3.14\n" ).value_or( 0 ), 3.14 );
+
+    // 浮点数特殊值 - 应该被拒绝
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "inf" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "INF" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "+inf" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "-inf" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "infinity" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "nan" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "NaN" ).has_value() );
+
+    // ========== 错误处理测试 ==========
+
+    // 空字符串
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "" ).has_value() );
+
+    // 只有空白字符
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "   " ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "  \t\n  " ).has_value() );
+
+    // 无效字符
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "abc" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "abc" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "12a" ).has_value() );
+
+    // 部分匹配（应该失败）
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "123abc" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "3.14abc" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "12.34.56" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "1.2.3" ).has_value() );
+
+    // 只有符号
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "+" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "-" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "+" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "-" ).has_value() );
+
+    // 浮点数混合符号（应该失败）
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "+-3.14" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "-+3.14" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<double>( "3.14e+5.2" ).has_value() );
+
+    // 十六进制格式错误
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "0xG" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "0x" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "0x1.2" ).has_value() );
+
+    // 八进制格式错误
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "089" ).has_value() );  // 8 不是有效的八进制数字
+    EXPECT_FALSE( utils::StringUtil::ToNumber<int>( "09" ).has_value() );
+
+    // 无符号类型带负号（应该失败）
+    EXPECT_FALSE( utils::StringUtil::ToNumber<unsigned int>( "-42" ).has_value() );
+    EXPECT_FALSE( utils::StringUtil::ToNumber<unsigned long>( "-1" ).has_value() );
+
+    // ========== 回归测试：单字符数字（曾因 Trim 缺陷被误判为无效） ==========
+
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "5" ).value_or( 0 ), 5 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( "0" ).value_or( 0 ), 0 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<int>( " 7 " ).value_or( 0 ), 7 );
+    EXPECT_EQ( utils::StringUtil::ToNumber<double>( "7" ).value_or( 0 ), 7.0 );
+    EXPECT_TRUE( utils::StringUtil::ToNumber<int>( "a" ).has_value() == false );
+
+    // ========== 验证 noexcept 属性 ==========
+
     EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<int>( "42" ) ) );
     EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<long>( "42" ) ) );
+    EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<long long>( "42" ) ) );
     EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<unsigned int>( "42" ) ) );
+    EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<unsigned long>( "42" ) ) );
+    EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<unsigned long long>( "42" ) ) );
+    EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<short>( "42" ) ) );
+    EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<unsigned short>( "42" ) ) );
     EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<float>( "3.14" ) ) );
     EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<double>( "3.14" ) ) );
+    EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<long double>( "3.14" ) ) );
     EXPECT_TRUE( noexcept( utils::StringUtil::ToNumber<bool>( "1" ) ) );
 }
 
@@ -961,6 +1219,14 @@ TEST( StringUtilTest, IsNumeric ) {
     EXPECT_FALSE( utils::StringUtil::IsNumeric( "+-" ) );
     EXPECT_FALSE( utils::StringUtil::IsNumeric( "12+34" ) );
     EXPECT_FALSE( utils::StringUtil::IsNumeric( "12-34" ) );
+
+    // 回归测试：只有符号和小数点也不是合法数字
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "+." ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "-." ) );
+
+    // 回归测试：高字节字符（UTF-8 多字节、全角数字）应安全返回 false
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "héllo" ) );
+    EXPECT_FALSE( utils::StringUtil::IsNumeric( "１２３" ) );
 }
 
 TEST( StringUtilTest, IsUpper ) {
@@ -981,6 +1247,10 @@ TEST( StringUtilTest, IsUpper ) {
     EXPECT_FALSE( utils::StringUtil::IsUpper( "123" ) );
     EXPECT_FALSE( utils::StringUtil::IsUpper( "!@#" ) );
     EXPECT_FALSE( utils::StringUtil::IsUpper( "ABC123" ) );
+
+    // 回归测试：高字节字符（如 UTF-8 字母）应安全返回 false，不触发未定义行为
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "É" ) );
+    EXPECT_FALSE( utils::StringUtil::IsUpper( "ÄBC" ) );
 }
 
 TEST( StringUtilTest, IsLower ) {
@@ -1001,6 +1271,10 @@ TEST( StringUtilTest, IsLower ) {
     EXPECT_FALSE( utils::StringUtil::IsLower( "123" ) );
     EXPECT_FALSE( utils::StringUtil::IsLower( "!@#" ) );
     EXPECT_FALSE( utils::StringUtil::IsLower( "abc123" ) );
+
+    // 回归测试：高字节字符（如 UTF-8 字母）应安全返回 false，不触发未定义行为
+    EXPECT_FALSE( utils::StringUtil::IsLower( "é" ) );
+    EXPECT_FALSE( utils::StringUtil::IsLower( "äbc" ) );
 }
 
 TEST( StringUtilTest, CamelToSnake ) {
@@ -1075,4 +1349,50 @@ TEST( StringUtilTest, SnakeToCamel ) {
     // 测试空单词（连续下划线）
     EXPECT_EQ( utils::StringUtil::SnakeToCamel( "a__b", false ), "aB" );
     EXPECT_EQ( utils::StringUtil::SnakeToCamel( "a__b", true ), "AB" );
+}
+
+TEST( StringUtilTest, StringParser ) {
+    utils::StringParser parser;
+    parser.AddRule( "name={name},age={age}" );
+
+    auto results = parser.Parse( "name=Tom,age=5" );
+    ASSERT_EQ( results.size(), 1u );
+    EXPECT_EQ( results[0].Get( "name" ), "Tom" );
+
+    // 回归测试：单字符捕获值曾被 Trim 缺陷吞掉（GetAs 内部使用 Trim）
+    auto age = results[0].GetAs<int>( "age" );
+    ASSERT_TRUE( age.has_value() );
+    EXPECT_EQ( *age, 5 );
+
+    // 捕获值带空白时应被 Trim 后解析
+    auto results2 = parser.Parse( "name=Bob,age= 42 " );
+    ASSERT_EQ( results2.size(), 1u );
+    EXPECT_EQ( results2[0].GetAs<int>( "age" ).value_or( 0 ), 42 );
+}
+
+TEST( StringUtilTest, StringParserGetAsBool ) {
+    utils::StringParser parser;
+    parser.AddRule( "enable={enable}" );
+
+    auto results = parser.Parse( "enable=1" );
+    ASSERT_EQ( results.size(), 1u );
+    auto value = results[0].GetAs<bool>( "enable" );
+    ASSERT_TRUE( value.has_value() );
+    EXPECT_TRUE( *value );
+
+    auto results2 = parser.Parse( "enable=true" );
+    ASSERT_EQ( results2.size(), 1u );
+    EXPECT_TRUE( results2[0].GetAs<bool>( "enable" ).value_or( false ) );
+}
+
+TEST( StringUtilTest, StringParserRepeatedParse ) {
+    // 回归测试：重复 Parse 不应重复累积捕获组名/重复编译正则
+    utils::StringParser parser;
+    parser.AddRule( "key={key}" );
+
+    for ( int i = 0; i < 3; ++i ) {
+        auto results = parser.Parse( "key=value" );
+        ASSERT_EQ( results.size(), 1u );
+        EXPECT_EQ( results[0].Get( "key" ), "value" );
+    }
 }

@@ -20,7 +20,8 @@ public:
     template <typename Func, typename... Args>
     void ExecuteIfTriggered( Func &&func, Args &&...args ) {
         bool expected = true;
-        if ( trigger_.compare_exchange_weak( expected, false ) ) {
+        // 使用 strong 版本：weak 版本可能出现伪失败而漏执行回调
+        if ( trigger_.compare_exchange_strong( expected, false ) ) {
             std::invoke( std::forward<Func>( func ), std::forward<Args>( args )... );
         }
     }

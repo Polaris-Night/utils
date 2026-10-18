@@ -1,12 +1,16 @@
 #pragma once
 
-#include <iostream>
 #include <mutex>
 #include <optional>
 #include <utility>
 
 namespace utils {
 
+/**
+ * @brief 一次性消费的可选值容器，支持可选的线程安全访问
+ *
+ * @tparam T 值类型
+ */
 template <typename T>
 class ConsumableOptional {
 public:
@@ -34,7 +38,12 @@ public:
         opt_ = std::forward<U>( value );
     }
 
-    std::optional<T> comsume() {
+    /**
+     * @brief 消费当前值
+     *
+     * @return std::optional<T> 存在值时返回该值并清空容器；否则返回 std::nullopt
+     */
+    std::optional<T> consume() {
         std::unique_lock<std::mutex> lock( mutex_, std::defer_lock );
         if ( thread_safe_ ) {
             lock.lock();
@@ -55,7 +64,12 @@ public:
         opt_.reset();
     }
 
-    bool has_value() const noexcept {
+    /**
+     * @brief 当前是否持有值
+     *
+     * 注意：thread_safe=true 时会加锁，锁操作可能抛出 std::system_error
+     */
+    bool has_value() const {
         std::unique_lock<std::mutex> lock( mutex_, std::defer_lock );
         if ( thread_safe_ ) {
             lock.lock();
@@ -63,12 +77,12 @@ public:
         return opt_.has_value();
     }
 
-    constexpr explicit operator bool() const noexcept { return has_value(); }
+    explicit operator bool() const { return has_value(); }
 
 private:
     mutable std::mutex mutex_;
     std::optional<T>   opt_;
-    bool               thread_safe_;
+    const bool         thread_safe_;
 };
 
 }  // namespace utils

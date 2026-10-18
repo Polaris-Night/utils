@@ -95,22 +95,33 @@ public:
         return IsErr() ? Error() : static_cast<E>( std::forward<U>( default_err ) );
     }
 
-    /// @brief map: 仅对 Ok 值进行变换
+    /// @brief map: 仅对 Ok 值进行变换；F 返回 void 时结果为 Result<void, E>
     template <typename F>
-    [[nodiscard]] auto Map( F &&f ) const -> Result<std::decay_t<std::invoke_result_t<F, T>>, E> {
-        using R = std::decay_t<std::invoke_result_t<F, T>>;
-        if ( IsOk() ) {
-            return Result<R, E>( f( Value() ) );
+    [[nodiscard]] auto Map( F &&f ) const -> Result<std::decay_t<std::invoke_result_t<F, const T &>>, E> {
+        using R = std::decay_t<std::invoke_result_t<F, const T &>>;
+        if constexpr ( std::is_void_v<R> ) {
+            if ( IsOk() ) {
+                std::forward<F>( f )( Value() );
+                return Result<void, E>{};
+            }
+            else {
+                return Result<void, E>( detail::err_tag{}, Error() );
+            }
         }
         else {
-            return Result<R, E>( detail::err_tag{}, Error() );
+            if ( IsOk() ) {
+                return Result<R, E>( std::forward<F>( f )( Value() ) );
+            }
+            else {
+                return Result<R, E>( detail::err_tag{}, Error() );
+            }
         }
     }
 
     /// @brief and_then: 对 Ok 值执行返回 Result 的函数
     template <typename F>
-    [[nodiscard]] auto AndThen( F &&f ) const -> std::invoke_result_t<F, T> {
-        using Ret = std::invoke_result_t<F, T>;
+    [[nodiscard]] auto AndThen( F &&f ) const -> std::invoke_result_t<F, const T &> {
+        using Ret = std::invoke_result_t<F, const T &>;
         static_assert( std::is_same_v<typename Ret::ErrorType, E>, "Error type must match in and_then" );
         if ( IsOk() ) {
             return f( Value() );

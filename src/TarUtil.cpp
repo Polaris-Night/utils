@@ -1,18 +1,89 @@
 #include "TarUtil.h"
-#include <stdio.h>
+#include <cstdlib>
 #include <filesystem>
+#include <vector>
 #include "Macros.h"
-#include "StringUtil.h"
 
-#if defined( PLATFORM_OS_LINUX )
-    #define POPEN  popen
-    #define PCLOSE pclose
-#elif defined( PLATFORM_OS_WINDOWS )
-    #define POPEN  _popen
-    #define PCLOSE _pclose
+#if !defined( PLATFORM_OS_WINDOWS )
+#include <sys/wait.h>
 #endif
 
 namespace fs = std::filesystem;
+
+namespace {
+
+/**
+ * @brief 对单个 shell 参数做安全引用
+ *
+ * 避免路径中的空格、引号、分号等字符被 shell 解析或造成命令注入。
+ */
+std::string ShellQuote( const std::string &arg ) {
+#if defined( PLATFORM_OS_WINDOWS )
+    // Windows cmd：双引号包裹，内部双引号转义
+    std::string quoted = "\"";
+    for ( char c : arg ) {
+        if ( c == '"' ) {
+            quoted += "\"\"";
+        }
+        else {
+            quoted += c;
+        }
+    }
+    quoted += "\"";
+    return quoted;
+#else
+    // POSIX sh：单引号包裹，内部单引号替换为 '\''
+    std::string quoted = "'";
+    for ( char c : arg ) {
+        if ( c == '\'' ) {
+            quoted += "'\\''";
+        }
+        else {
+            quoted += c;
+        }
+    }
+    quoted += "'";
+    return quoted;
+#endif
+}
+
+/**
+ * @brief 执行命令并返回其退出码
+ *
+ * @param args 命令及参数列表（逐参数安全引用）
+ * @param message [out] 失败时的错误信息（含命令行）
+ * @return int 进程退出码；无法执行时返回 -1
+ */
+int RunCommand( const std::vector<std::string> &args, std::string &message ) {
+    std::string cmd;
+    for ( const auto &arg : args ) {
+        if ( !cmd.empty() ) {
+            cmd += ' ';
+        }
+        cmd += ShellQuote( arg );
+    }
+
+    int status = std::system( cmd.c_str() );
+    if ( status == -1 ) {
+        message = "failed to execute command: " + cmd;
+        return -1;
+    }
+
+#if !defined( PLATFORM_OS_WINDOWS )
+    if ( !WIFEXITED( status ) ) {
+        message = "command terminated abnormally: " + cmd;
+        return -1;
+    }
+    status = WEXITSTATUS( status );
+#endif
+
+    if ( status != 0 ) {
+        message = "command failed with exit code " + std::to_string( status ) + ": " + cmd;
+    }
+    return status;
+}
+
+}  // namespace
 
 namespace utils {
 
@@ -78,13 +149,22 @@ size_t TarObject::GetFileCount() const {
 }
 
 TarResult TarObject::Compress() const {
-    TarResult                result;
-    std::vector<std::string> cmd{ "tar", "-czf", tar_path_, "-P" };
-    for ( auto &exclude : exclude_list_ ) {
-        cmd.emplace_back( "--exclude='" + exclude + "'" );
+    TarResult result;
+    if ( tar_path_.empty() ) {
+        result.message = "tar file path is empty";
+        return result;
     }
-    // cmd.insert( cmd.end(), file_list_.begin(), file_list_.end() );
-    for ( auto &file : file_list_ ) {
+    if ( file_list_.empty() ) {
+        result.message = "no file to compress";
+        return result;
+    }
+
+    // -P 需作为独立参数，且所有参数都会被安全引用
+    std::vector<std::string> cmd{ "tar", "-czf", tar_path_, "-P" };
+    for ( const auto &exclude : exclude_list_ ) {
+        cmd.emplace_back( "--exclude=" + exclude );
+    }
+    for ( const auto &file : file_list_ ) {
         fs::path path( file );
         if ( path.is_absolute() ) {
             cmd.emplace_back( "-C" );
@@ -95,12 +175,8 @@ TarResult TarObject::Compress() const {
             cmd.emplace_back( file );
         }
     }
-    if ( std::system( StringUtil::Join( cmd, " " ).c_str() ) != 0 ) {
-        result.success = false;
-    }
-    else {
-        result.success = true;
-    }
+
+    result.success = RunCommand( cmd, result.message ) == 0;
     return result;
 }
 
@@ -114,20 +190,66 @@ bool TarObject::TarExist() const {
 }
 
 TarResult TarUtil::Compress( const std::string &tar_path, const std::set<std::string> &source_list ) {
-    TarResult                result;
-    std::vector<std::string> cmd{ "tar", "-czfP", tar_path };
-    cmd.insert( cmd.end(), source_list.begin(), source_list.end() );
-    if ( std::system( StringUtil::Join( cmd, " " ).c_str() ) != 0 ) {
-        result.success = false;
+    TarResult result;
+    if ( tar_path.empty() ) {
+        result.message = "tar file path is empty";
+        return result;
     }
-    else {
-        result.success = true;
+    if ( source_list.empty() ) {
+        result.message = "no file to compress";
+        return result;
     }
+
+    // 注意：不能使用 -czfP 组合写法，GNU tar 会把 "P" 当作 -f 的归档文件名参数
+    std::vector<std::string> cmd{ "tar", "-czf", tar_path, "-P" };
+    for ( const auto &file : source_list ) {
+        fs::path path( file );
+        if ( path.is_absolute() ) {
+            // 与 TarObject::Compress 行为一致：以 -C 父目录 + 文件名入包，归档内为相对路径
+            cmd.emplace_back( "-C" );
+            cmd.emplace_back( path.parent_path().string() );
+            cmd.emplace_back( path.filename().string() );
+        }
+        else {
+            cmd.emplace_back( file );
+        }
+    }
+
+    result.success = RunCommand( cmd, result.message ) == 0;
     return result;
 }
 
 TarResult TarUtil::Decompress( const std::string &tar_path, const std::string &dec_path ) {
-    return {};
+    TarResult result;
+    if ( tar_path.empty() ) {
+        result.message = "tar file path is empty";
+        return result;
+    }
+
+    std::error_code ec;
+    if ( !fs::exists( tar_path, ec ) ) {
+        result.message = "tar file does not exist: " + tar_path;
+        return result;
+    }
+
+    if ( !dec_path.empty() ) {
+        std::error_code dir_ec;
+        fs::create_directories( dec_path, dir_ec );  // 目录已存在时不会报错
+        if ( dir_ec ) {
+            result.message = "failed to create directory: " + dec_path;
+            return result;
+        }
+    }
+
+    // 使用 -xf 由 tar 自动识别压缩格式（gzip/bzip2/xz/zstd）
+    std::vector<std::string> cmd{ "tar", "-xf", tar_path };
+    if ( !dec_path.empty() ) {
+        cmd.emplace_back( "-C" );
+        cmd.emplace_back( dec_path );
+    }
+
+    result.success = RunCommand( cmd, result.message ) == 0;
+    return result;
 }
 
 }  // namespace utils

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -73,7 +75,7 @@ public:
 private:
     BreakpadHandler();
     class BreakpadHandlerPrivate;
-    BreakpadHandlerPrivate *d = nullptr;
+    std::unique_ptr<BreakpadHandlerPrivate> d;
 };
 
 }  // namespace utils

@@ -126,6 +126,12 @@ TEST_F( FileUtilTest, CleanPath ) {
 
     // 测试相对路径
     EXPECT_EQ( FileUtil::CleanPath( "test/path/" ), "test/path" );
+
+#ifndef _WIN32
+    // 回归测试：POSIX 下 '\\' 是合法文件名字符，不应被当作路径分隔符去掉
+    EXPECT_EQ( FileUtil::CleanPath( "/home/user\\" ), "/home/user\\" );
+    EXPECT_EQ( FileUtil::CleanPath( "test/path\\" ), "test/path\\" );
+#endif
 }
 
 TEST_F( FileUtilTest, Load2StrAndWriteStr ) {
@@ -180,6 +186,22 @@ TEST_F( FileUtilTest, Load2ByteArrayAndWriteBytes ) {
     // 测试读取不存在的文件
     std::vector<uint8_t> non_existent = FileUtil::Load2ByteArray( "non_existent.bin" );
     EXPECT_TRUE( non_existent.empty() );
+}
+
+TEST_F( FileUtilTest, LoadWithNonTerminatedStringView ) {
+    std::string file_path = FileUtil::JoinPaths( test_dir_, "sv_load.txt" );
+    FileUtil::WriteStr( file_path, "abcdef" );
+
+    // 回归测试：非 '\0' 结尾的 string_view 路径也必须可读取（data() 曾直接传给 ifstream）
+    std::string      holder = "xx" + file_path + "yy";
+    std::string_view sv( holder.data() + 2, file_path.size() );
+    EXPECT_EQ( FileUtil::Load2Str( sv ), "abcdef" );
+
+    FileUtil::WriteStr( file_path, "abcdef" );
+    std::string_view sv2( holder.data() + 2, file_path.size() );
+    auto             bytes = FileUtil::Load2ByteArray( sv2 );
+    ASSERT_EQ( bytes.size(), 6u );
+    EXPECT_EQ( std::string( bytes.begin(), bytes.end() ), "abcdef" );
 }
 
 TEST_F( FileUtilTest, CreateDirectories ) {
@@ -253,6 +275,17 @@ TEST_F( FileUtilTest, Copy ) {
     EXPECT_TRUE( FileUtil::Copy( source_dir, dest_dir ) );
     EXPECT_TRUE( FileUtil::Exists( dest_dir ) );
     EXPECT_TRUE( FileUtil::Exists( FileUtil::JoinPaths( dest_dir, "file_in_dir.txt" ) ) );
+
+    // 回归测试：目录复制必须递归复制子目录（曾经只复制一层）
+    std::string nested_dir = FileUtil::JoinPaths( source_dir, "nested", "deep" );
+    FileUtil::CreateDirectories( nested_dir );
+    FileUtil::WriteStr( FileUtil::JoinPaths( nested_dir, "nested_file.txt" ), "nested content" );
+
+    std::string dest_dir2 = FileUtil::JoinPaths( test_dir_, "dest_dir2" );
+    EXPECT_TRUE( FileUtil::Copy( source_dir, dest_dir2 ) );
+    std::string copied_nested = FileUtil::JoinPaths( dest_dir2, "nested", "deep", "nested_file.txt" );
+    EXPECT_TRUE( FileUtil::Exists( copied_nested ) );
+    EXPECT_EQ( FileUtil::Load2Str( copied_nested ), "nested content" );
 }
 
 TEST_F( FileUtilTest, Move ) {
@@ -284,6 +317,13 @@ TEST_F( FileUtilTest, Move ) {
     EXPECT_FALSE( FileUtil::Exists( new_source ) );
     std::string loaded_new_content = FileUtil::Load2Str( dest_file );
     EXPECT_EQ( loaded_new_content, new_content );
+
+    // 回归测试：源不存在时即使 overwrite=true 也不得删除已存在的目标
+    std::string existing_dest = FileUtil::JoinPaths( test_dir_, "existing_dest.txt" );
+    FileUtil::WriteStr( existing_dest, "keep me" );
+    EXPECT_FALSE( FileUtil::Move( FileUtil::JoinPaths( test_dir_, "missing_src.txt" ), existing_dest, true ) );
+    EXPECT_TRUE( FileUtil::Exists( existing_dest ) );
+    EXPECT_EQ( FileUtil::Load2Str( existing_dest ), "keep me" );
 }
 
 TEST_F( FileUtilTest, DirName ) {
@@ -471,6 +511,19 @@ TEST_F( FileUtilTest, CreateTempFile ) {
 
     // 清理
     FileUtil::Remove( temp_file_in_dir );
+
+    // 回归测试：连续创建的临时文件必须互不相同且均存在
+    std::string temp_a = FileUtil::CreateTempFile( "unique", ".tmp", test_dir_ );
+    std::string temp_b = FileUtil::CreateTempFile( "unique", ".tmp", test_dir_ );
+    EXPECT_FALSE( temp_a.empty() );
+    EXPECT_FALSE( temp_b.empty() );
+    EXPECT_NE( temp_a, temp_b );
+    EXPECT_TRUE( FileUtil::Exists( temp_a ) );
+    EXPECT_TRUE( FileUtil::Exists( temp_b ) );
+
+    // 清理
+    FileUtil::Remove( temp_a );
+    FileUtil::Remove( temp_b );
 }
 
 TEST_F( FileUtilTest, CreateTempDirectory ) {

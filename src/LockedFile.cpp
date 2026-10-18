@@ -39,15 +39,25 @@ bool LockedFile::Lock( LockMode mode, bool is_block ) {
         Unlock();
     }
 #if PLATFORM_OS_LINUX
-    // 使用flock锁定
+    // 使用 fcntl 文件锁
+    int handle = Handle();
+    if ( handle < 0 ) {
+        return false;  // 无法获取底层文件描述符
+    }
     struct flock fl;
     fl.l_whence = SEEK_SET;
     fl.l_start  = 0;
     fl.l_len    = 0;
     fl.l_type   = ( mode == ReadLock ) ? F_RDLCK : F_WRLCK;
     int cmd     = is_block ? F_SETLKW : F_SETLK;
-    int ret     = fcntl( Handle(), cmd, &fl );
-    if ( ret == -1 && errno != EINTR && errno != EAGAIN ) {
+    for ( ;; ) {
+        if ( fcntl( handle, cmd, &fl ) == 0 ) {
+            break;  // 加锁成功
+        }
+        if ( errno == EINTR ) {
+            continue;  // 被信号打断，重试
+        }
+        // EAGAIN/EACCES（非阻塞模式下锁被占用）或其他错误
         return false;
     }
 #endif
@@ -63,14 +73,22 @@ bool LockedFile::Unlock() {
         return true;
     }
 #if PLATFORM_OS_LINUX
+    int handle = Handle();
+    if ( handle < 0 ) {
+        return false;  // 无法获取底层文件描述符
+    }
     struct flock fl;
     fl.l_whence = SEEK_SET;
     fl.l_start  = 0;
     fl.l_len    = 0;
     fl.l_type   = F_UNLCK;
-    int ret     = fcntl( Handle(), F_SETLKW, &fl );
-
-    if ( ret == -1 ) {
+    for ( ;; ) {
+        if ( fcntl( handle, F_SETLK, &fl ) == 0 ) {
+            break;  // 解锁成功（无需阻塞等待）
+        }
+        if ( errno == EINTR ) {
+            continue;  // 被信号打断，重试
+        }
         return false;
     }
 #endif

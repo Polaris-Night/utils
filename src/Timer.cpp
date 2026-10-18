@@ -3,66 +3,67 @@
 namespace utils {
 
 void ElapsedTimer::Start() {
-    if ( !is_start_ ) {
+    if ( !is_running_ ) {
         start_time_ = GetNow();
-        is_start_   = true;
+        is_running_ = true;
         is_pause_   = false;
     }
 }
 
 void ElapsedTimer::Stop( bool reset_time ) {
-    if ( reset_time ) {
-        start_time_ = GetReset();
+    if ( is_running_ && !is_pause_ ) {
+        accumulated_ += std::chrono::duration_cast<Nanoseconds>( GetNow() - start_time_ );
     }
-    is_start_ = false;
-    is_pause_ = false;
+    is_running_ = false;
+    is_pause_   = false;
+    if ( reset_time ) {
+        accumulated_ = Nanoseconds( 0 );
+    }
 }
 
 void ElapsedTimer::Pause() {
-    if ( is_start_ && !is_pause_ ) {
-        pause_time_ = GetNow();
-        is_pause_   = true;
+    if ( is_running_ && !is_pause_ ) {
+        accumulated_ += std::chrono::duration_cast<Nanoseconds>( GetNow() - start_time_ );
+        is_pause_ = true;
     }
 }
 
 void ElapsedTimer::Resume() {
-    if ( is_start_ && is_pause_ ) {
-        start_time_ += GetNow() - pause_time_;
-        is_pause_ = false;
+    if ( is_running_ && is_pause_ ) {
+        start_time_ = GetNow();
+        is_pause_   = false;
     }
 }
 
 void ElapsedTimer::Restart() {
-    Stop();
-    Start();
+    accumulated_ = Nanoseconds( 0 );
+    start_time_  = GetNow();
+    is_running_  = true;
+    is_pause_    = false;
 }
 
 std::chrono::steady_clock::time_point ElapsedTimer::GetNow() const {
     return std::chrono::steady_clock::now();
 }
 
-std::chrono::steady_clock::time_point ElapsedTimer::GetReset() const {
-    return std::chrono::steady_clock::time_point( Nanoseconds( 0 ) );
-}
+Timer::Timer( int msec ) : interval_( Milliseconds( msec ) ) {}
 
-
-Timer::Timer( int msec ) {}
-
-Timer::Timer( Milliseconds msec ) {}
+Timer::Timer( Milliseconds msec ) : interval_( msec ) {}
 
 void Timer::Start() {
     if ( !is_running_ ) {
+        start_time_ = std::chrono::steady_clock::now();
+        is_running_ = true;
     }
 }
 
 void Timer::Stop() {
-    if ( is_running_ ) {
-    }
+    is_running_ = false;
 }
 
 void Timer::Restart() {
-    Stop();
-    Start();
+    start_time_ = std::chrono::steady_clock::now();
+    is_running_ = true;
 }
 
 void Timer::SetInterval( int msec ) {
@@ -78,7 +79,10 @@ bool Timer::IsRunning() const {
 }
 
 bool Timer::IsTimeout() const {
-    return false;
+    if ( !is_running_ ) {
+        return false;
+    }
+    return std::chrono::steady_clock::now() - start_time_ >= interval_;
 }
 
 }  // namespace utils

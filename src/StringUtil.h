@@ -1,10 +1,19 @@
 #pragma once
 
+#include <array>
+#include <cctype>
+#include <cerrno>
 #include <charconv>
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
 #include <iomanip>
+#include <limits>
+#include <map>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -133,7 +142,7 @@ public:
      *
      * @note
      *   - 仅对控制字符和引号进行转义
-     *   - UTF-8 多字节字符不会被拆解（因为其字节值 > 127）
+     *   - 字节值 > 126 的非 ASCII 字符（含 UTF-8 多字节序列）会逐字节转义为 \\xHH
      *   - 输出总是可打印 ASCII
      *
      * @code{.cpp}
@@ -379,7 +388,7 @@ public:
     template <typename... Args>
     [[nodiscard]] static std::string Join( std::string_view separator, Args &&...args ) {
         static_assert( sizeof...( args ) > 0, "Join requires at least one argument" );
-        static_assert( ( IsStringType_v<Args>, ... ), "Join requires argument is string type" );
+        static_assert( ( IsStringType_v<Args> && ... ), "Join requires argument is string type" );
         std::ostringstream oss;
         bool               first = true;
 
@@ -585,7 +594,7 @@ public:
      * @brief 转换为二进制字符串
      *
      * @param value 数值
-     * @param count 二进制位数
+     * @param count 二进制位数，有效范围 [0, 64]；超过 64 时按 64 处理，小于等于 0 时返回空字符串
      * @return std::string
      *
      * @code{.cpp}
@@ -609,8 +618,10 @@ public:
      * @note
      * - 忽略首尾空白字符
      * - 要求整个字符串为合法数字表示，**不允许部分匹配**（如 "123abc" 会失败）
-     * - 对于任何非合法数字格式的输入（除空白外），均返回 std::nullopt
-     * - 浮点数不保证支持 "inf" 或 "nan"
+     * - 对于任何非合法数字格式的输入，均返回 std::nullopt
+     * - 不支持 "inf" 或 "nan" 等特殊值
+     * - 支持正负号（如 "-0xFF", "+077"）
+     * - 无符号类型不允许负号
      *
      * @code{.cpp}
      *   auto result = ToNumber<int>("42");
@@ -619,17 +630,20 @@ public:
      *   auto result2 = ToNumber<int>("  0xFF ");
      *   // result2 = 255
      *
-     *   auto result3 = ToNumber<double>("3.14");
-     *   // result3 = 3.14
+     *   auto result3 = ToNumber<int>("-0xFF");
+     *   // result3 = -255
      *
-     *   auto result4 = ToNumber<int>("");
-     *   // result4 = std::nullopt
+     *   auto result4 = ToNumber<double>("3.14");
+     *   // result4 = 3.14
      *
-     *   auto result5 = ToNumber<int>("abc");
+     *   auto result5 = ToNumber<int>("");
      *   // result5 = std::nullopt
      *
      *   auto result6 = ToNumber<int>("123abc");
      *   // result6 = std::nullopt
+     *
+     *   auto result7 = ToNumber<unsigned int>("-42");
+     *   // result7 = std::nullopt
      * @endcode
      */
     template <typename T>
@@ -638,37 +652,62 @@ public:
         if ( str.empty() ) {
             return std::nullopt;
         }
-        str = Trim( str );
-        if ( str.empty() ) {
+        std::string s = Trim( str );
+        if ( s.empty() ) {
             return std::nullopt;
         }
-        T           value{};
-        const char *begin      = str.data();
-        const char *end        = begin + str.size();
-        const char *parsed_end = begin;
+        char *end_ptr = nullptr;
+        errno         = 0;
         if constexpr ( std::is_integral_v<T> ) {
-            int base = DetectBase( str );
-            if ( base == 16 ) {
-                // 处理十六进制，跳过 "0x" 或 "0X" 前缀
-                begin += 2;
+            if constexpr ( !std::is_signed_v<T> ) {
+                if ( s[0] == '-' ) {
+                    return std::nullopt;
+                }
             }
-            const auto [ptr, ec] = std::from_chars( begin, end, value, base );
-            if ( ec != std::errc{} || ptr == begin ) {
+            auto value = std::conditional_t<std::is_signed_v<T>, long long, unsigned long long>{};
+            if constexpr ( std::is_signed_v<T> ) {
+                value = std::strtoll( s.c_str(), &end_ptr, 0 );
+            }
+            else {
+                value = std::strtoull( s.c_str(), &end_ptr, 0 );
+            }
+            if ( end_ptr == s.c_str() || *end_ptr != '\0' || errno == ERANGE ) {
                 return std::nullopt;
             }
-            parsed_end = ptr;
+            if constexpr ( sizeof( T ) < sizeof( decltype( value ) ) ) {
+                if constexpr ( std::is_signed_v<T> ) {
+                    if ( value < std::numeric_limits<T>::min() || value > std::numeric_limits<T>::max() ) {
+                        return std::nullopt;
+                    }
+                }
+                else {
+                    if ( value > std::numeric_limits<T>::max() ) {
+                        return std::nullopt;
+                    }
+                }
+            }
+            return static_cast<T>( value );
         }
         else if constexpr ( std::is_floating_point_v<T> ) {
-            const auto [ptr, ec] = std::from_chars( begin, end, value );
-            if ( ec != std::errc{} || ptr == begin ) {
+            T value{};
+            if constexpr ( std::is_same_v<T, float> ) {
+                value = std::strtof( s.c_str(), &end_ptr );
+            }
+            else if constexpr ( std::is_same_v<T, double> ) {
+                value = std::strtod( s.c_str(), &end_ptr );
+            }
+            else {
+                value = std::strtold( s.c_str(), &end_ptr );
+            }
+            if ( end_ptr == s.c_str() || *end_ptr != '\0' || errno == ERANGE ) {
                 return std::nullopt;
             }
-            parsed_end = ptr;
+            if ( !std::isfinite( value ) ) {
+                return std::nullopt;
+            }
+            return value;
         }
-        if ( parsed_end != end ) {
-            return std::nullopt;
-        }
-        return value;
+        return std::nullopt;
     }
     /**
      * @brief 将数值类型转换为字符串
@@ -1017,8 +1056,6 @@ private:
             ( ..., ( error_msg->append( std::forward<Args>( args ) ) ) );
         }
     }
-    /// 检测整数进制：支持 0x（16进制）、0（8进制）、其余为10进制
-    static int DetectBase( std::string_view str ) noexcept;
 };
 
 /**
@@ -1155,6 +1192,33 @@ private:
         oss << std::fixed << std::setprecision( precision ) << value;
         return oss.str();
     }
+};
+
+class StringParser {
+public:
+    class MatchResult {
+    public:
+        const std::string &Get( const std::string &name ) const;
+
+        template <typename T>
+        std::optional<T> GetAs( const std::string &name ) const;
+
+    private:
+        friend class StringParser;
+        std::map<std::string, std::string> groups;
+    };
+
+public:
+    explicit StringParser();
+    ~StringParser();
+
+    StringParser &AddRule( const std::string &rule );
+
+    std::vector<MatchResult> Parse( const std::string &text, std::string *error_msg = nullptr ) const;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace utils

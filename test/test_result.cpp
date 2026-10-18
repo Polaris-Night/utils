@@ -115,19 +115,19 @@ TEST( ResultTest, AndThenOperationVoid ) {
 TEST( ResultTest, ExceptionCases ) {
     // 测试访问Err的Value会抛出异常
     auto result_err = MakeErr<int, std::string>( "error" );
-    EXPECT_THROW( result_err.Value(), std::bad_variant_access );
+    EXPECT_THROW( (void)result_err.Value(), std::bad_variant_access );
 
     // 测试访问Ok的Error会抛出异常
     auto result_ok = MakeOk<int, std::string>( 42 );
-    EXPECT_THROW( result_ok.Error(), std::bad_variant_access );
+    EXPECT_THROW( (void)result_ok.Error(), std::bad_variant_access );
 
     // 测试void特化中访问Ok的Error会抛出异常
     auto void_result_ok = MakeOk<std::string>();
-    EXPECT_THROW( void_result_ok.Error(), std::bad_variant_access );
+    EXPECT_THROW( (void)void_result_ok.Error(), std::bad_variant_access );
 
     // 测试void特化中访问Err的Error正常工作
     auto void_result_err = MakeErr<void, std::string>( "error" );
-    EXPECT_NO_THROW( void_result_err.Error() );
+    EXPECT_NO_THROW( (void)void_result_err.Error() );
     EXPECT_EQ( void_result_err.Error(), "error" );
 }
 
@@ -150,4 +150,32 @@ TEST( ResultTest, DifferentTypeCombinations ) {
     auto bool_error = MakeErr<bool, double>( 3.14 );
     EXPECT_TRUE( bool_error.IsErr() );
     EXPECT_DOUBLE_EQ( bool_error.Error(), 3.14 );
+}
+
+// 测试Map变换：回调返回 void 时应得到 Result<void, E> 并执行回调
+TEST( ResultTest, MapToVoid ) {
+    auto result_ok = MakeOk<int, std::string>( 42 );
+    bool called    = false;
+    auto mapped_ok = result_ok.Map( [&called]( int value ) { called = ( value == 42 ); } );
+    EXPECT_TRUE( called );
+    EXPECT_TRUE( mapped_ok.IsOk() );
+
+    auto result_err    = MakeErr<int, std::string>( "error" );
+    bool err_called    = false;
+    auto mapped_err    = result_err.Map( [&err_called]( int ) { err_called = true; } );
+    EXPECT_FALSE( err_called );  // Err 情况下不执行回调
+    EXPECT_TRUE( mapped_err.IsErr() );
+    EXPECT_EQ( mapped_err.Error(), "error" );
+}
+
+// 测试Map变换：普通返回值与引用传参的回调均可工作
+TEST( ResultTest, MapWithConstRefCallback ) {
+    auto result = MakeOk<int, std::string>( 21 );
+    auto mapped = result.Map( []( const int &value ) { return value * 2; } );
+    ASSERT_TRUE( mapped.IsOk() );
+    EXPECT_EQ( mapped.Value(), 42 );
+
+    auto chained = mapped.Map( []( const int &value ) { return std::to_string( value ); } );
+    ASSERT_TRUE( chained.IsOk() );
+    EXPECT_EQ( chained.Value(), "42" );
 }

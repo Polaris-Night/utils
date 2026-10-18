@@ -46,15 +46,15 @@ TEST( ResourceGuardTest, MoveAssignment ) {
         ResourceGuard<TestResource> guard1( resource1.get(), [&resource1]( auto ) { resource1.reset(); } );
         ResourceGuard<TestResource> guard2( resource2, TestResourceDeleter );
         EXPECT_EQ( count, 2 );
+        // 移动赋值必须先释放 guard2 原有的 resource2，避免资源泄漏
         guard2 = std::move( guard1 );
-        EXPECT_EQ( count, 2 );
+        EXPECT_EQ( count, 1 );
         EXPECT_EQ( guard1.Get(), nullptr );
-        EXPECT_NE( guard2.Get(), nullptr );
+        EXPECT_EQ( guard2.Get(), resource1.get() );
     }
-    EXPECT_EQ( count, 1 );
-    EXPECT_EQ( resource1, nullptr );
-    TestResourceDeleter( resource2 );
+    // guard2 析构释放 resource1
     EXPECT_EQ( count, 0 );
+    EXPECT_EQ( resource1, nullptr );
 }
 
 TEST( ResourceGuardTest, GetAndRelease ) {

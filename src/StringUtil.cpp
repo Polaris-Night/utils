@@ -11,18 +11,6 @@ void StringUtil::ClearError( std::string *error_msg ) noexcept {
     }
 }
 
-int StringUtil::DetectBase( std::string_view str ) noexcept {
-    if ( str.size() >= 2 && str[0] == '0' ) {
-        if ( str[1] == 'x' || str[1] == 'X' ) {
-            return 16;
-        }
-        else if ( ::isdigit( str[1] ) ) {
-            return 8;
-        }
-    }
-    return 10;
-}
-
 std::vector<std::string> StringUtil::Split( std::string_view str, std::string_view separator, bool skip_empty,
                                             bool each_char_as_separator ) noexcept {
     auto                     parts = SplitRef( str, separator, skip_empty, each_char_as_separator );
@@ -37,7 +25,8 @@ std::vector<std::string> StringUtil::Split( std::string_view str, std::string_vi
 std::vector<std::string_view> StringUtil::SplitRef( std::string_view str, std::string_view separator, bool skip_empty,
                                                     bool each_char_as_separator ) noexcept {
     std::vector<std::string_view> result;
-    result.reserve( str.size() + 2 );  // 空separator时最大可能N+2个元素
+    // 空separator时最大可能N+2个元素；对大字符串做上限约束，避免一次性预留过大内存
+    result.reserve( std::min<size_t>( str.size() + 2, 1024 ) );
 
     // 分隔符为空时，返回每个字符的子串
     if ( separator.empty() ) {
@@ -293,10 +282,6 @@ bool StringUtil::WildcardMatch( std::string_view str, std::string_view pattern )
 }
 
 double StringUtil::ConvertByteUnit( double value, std::string_view from_unit, std::string_view to_unit ) noexcept {
-    if ( value == 0.0 ) {
-        return 0.0;
-    }
-
     // 获取单位对应的 1024 指数（即 log2(size / B) / 10）
     auto get_exponent = []( std::string_view unit ) -> int {
         if ( EqualsIgnoreCase( unit, "B" ) ) {
@@ -321,7 +306,11 @@ double StringUtil::ConvertByteUnit( double value, std::string_view from_unit, st
     int to_exp   = get_exponent( to_unit );
 
     if ( from_exp == -1 || to_exp == -1 ) {
-        return -1.0;  // 无效单位
+        return -1.0;  // 无效单位（无论数值是否为 0）
+    }
+
+    if ( value == 0.0 ) {
+        return 0.0;
     }
 
     int              exponent_diff = from_exp - to_exp;
@@ -421,23 +410,24 @@ std::string_view StringUtil::RightRef( std::string_view str, size_t len ) noexce
 }
 
 std::string StringUtil::Trim( std::string_view str ) noexcept {
-    std::string blank = " \n\r\t\v\f";
-    size_t      begin = str.size(), end = 0;
+    constexpr std::string_view blank = " \n\r\t\v\f";
+    size_t                     begin = str.size(), end = 0;
     for ( size_t i = 0; i < str.size(); ++i ) {
-        if ( blank.find( str[i] ) == std::string::npos ) {
+        if ( blank.find( str[i] ) == std::string_view::npos ) {
             begin = i;
             break;
         }
     }
 
     for ( size_t i = str.size(); i > 0; --i ) {
-        if ( blank.find( str[i - 1] ) == std::string::npos ) {
+        if ( blank.find( str[i - 1] ) == std::string_view::npos ) {
             end = i - 1;
             break;
         }
     }
 
-    if ( begin >= end ) {
+    // begin > end 说明未找到非空白字符（全空白）；单字符结果时 begin == end，不能误判
+    if ( begin > end ) {
         return "";
     }
     else {
@@ -446,22 +436,23 @@ std::string StringUtil::Trim( std::string_view str ) noexcept {
 }
 
 std::string StringUtil::Repeat( std::string_view str, unsigned int times ) {
-    std::stringstream ss;
+    std::string result;
+    result.reserve( str.size() * times );
     for ( unsigned int i = 0; i < times; ++i ) {
-        ss << str;
+        result.append( str );
     }
-    return ss.str();
+    return result;
 }
 
 std::string StringUtil::ToUpper( std::string_view str ) {
     std::string s( str );
-    std::transform( s.begin(), s.end(), s.begin(), ::toupper );
+    std::transform( s.begin(), s.end(), s.begin(), []( unsigned char c ) { return std::toupper( c ); } );
     return s;
 }
 
 std::string StringUtil::ToLower( std::string_view str ) {
     std::string s( str );
-    std::transform( s.begin(), s.end(), s.begin(), ::tolower );
+    std::transform( s.begin(), s.end(), s.begin(), []( unsigned char c ) { return std::tolower( c ); } );
     return s;
 }
 
@@ -480,20 +471,28 @@ bool StringUtil::EndWith( std::string_view str, std::string_view suffix ) {
 }
 
 bool StringUtil::Contains( std::string_view str, std::string_view token ) noexcept {
-    return str.find( token ) != std::string::npos ? true : false;
+    return str.find( token ) != std::string_view::npos;
 }
 
 std::string StringUtil::ConvertToHexStr( std::string_view data, char separator ) {
-    std::stringstream ss;
-    for ( size_t i = 0; i < data.length(); ++i ) {
-        // 每个字节转换为两位十六进制
-        ss << std::setw( 2 ) << std::setfill( '0' ) << std::hex << (int)(unsigned char)data[i];
-        // 在每两个字符之间添加间隔符
-        if ( i < data.length() - 1 ) {
-            ss << separator;
-        }
+    static constexpr char hex_lut[] = "0123456789abcdef";
+
+    if ( data.empty() ) {
+        return {};
     }
-    return ss.str();
+
+    std::string result;
+    result.reserve( data.size() * 3 );  // 每个字节两位十六进制 + 分隔符
+
+    for ( size_t i = 0; i < data.length(); ++i ) {
+        const unsigned char byte = static_cast<unsigned char>( data[i] );
+        if ( i > 0 ) {
+            result += separator;
+        }
+        result += hex_lut[( byte >> 4 ) & 0xF];
+        result += hex_lut[byte & 0xF];
+    }
+    return result;
 }
 
 bool StringUtil::EqualsIgnoreCase( std::string_view str1, std::string_view str2 ) noexcept {
@@ -501,7 +500,8 @@ bool StringUtil::EqualsIgnoreCase( std::string_view str1, std::string_view str2 
         return false;
     }
     for ( size_t i = 0; i < str1.size(); ++i ) {
-        if ( std::tolower( str1[i] ) != std::tolower( str2[i] ) ) {
+        if ( std::tolower( static_cast<unsigned char>( str1[i] ) ) !=
+             std::tolower( static_cast<unsigned char>( str2[i] ) ) ) {
             return false;
         }
     }
@@ -509,10 +509,16 @@ bool StringUtil::EqualsIgnoreCase( std::string_view str1, std::string_view str2 
 }
 
 std::string StringUtil::IntToBitString( uint64_t value, int count ) noexcept {
+    if ( count <= 0 ) {
+        return {};
+    }
+    if ( count > 64 ) {
+        count = 64;  // 避免移位超过 64 位造成未定义行为
+    }
     std::string bit_string;
+    bit_string.reserve( static_cast<size_t>( count ) );
     for ( int i = count - 1; i >= 0; --i ) {
-        uint64_t mask = 1ULL << i;
-        bit_string += ( value & mask ) ? '1' : '0';
+        bit_string += ( value & ( 1ULL << i ) ) ? '1' : '0';
     }
     return bit_string;
 }
@@ -690,8 +696,7 @@ std::string StringUtil::RandomString( size_t length, std::string_view charset ) 
     }
 
     thread_local static std::random_device rd;
-    thread_local static std::seed_seq      seed{ rd(), rd(), rd(), rd() };
-    thread_local static std::mt19937       gen( seed );
+    thread_local static std::mt19937       gen{ rd() };
     std::uniform_int_distribution<size_t>  dis( 0, charset.length() - 1 );
 
     std::string result;
@@ -716,18 +721,23 @@ bool StringUtil::IsNumeric( std::string_view str ) noexcept {
         start = 1;
     }
     bool has_decimal_point = false;
+    bool has_digit         = false;
     for ( size_t i = start; i < str.size(); ++i ) {
-        if ( str[i] == '.' ) {
+        const unsigned char c = static_cast<unsigned char>( str[i] );
+        if ( c == '.' ) {
             if ( has_decimal_point ) {
                 return false;  // 多个小数点为非法数字
             }
             has_decimal_point = true;
         }
-        else if ( !std::isdigit( str[i] ) ) {
+        else if ( std::isdigit( c ) ) {
+            has_digit = true;
+        }
+        else {
             return false;  // 存在非数字字符
         }
     }
-    return true;
+    return has_digit;  // 如 "+." 之类只有符号和小数点，不是合法数字
 }
 
 bool StringUtil::IsUpper( std::string_view str ) noexcept {
@@ -735,7 +745,7 @@ bool StringUtil::IsUpper( std::string_view str ) noexcept {
         return false;
     }
     for ( auto c : str ) {
-        if ( !std::isupper( c ) ) {
+        if ( !std::isupper( static_cast<unsigned char>( c ) ) ) {
             return false;
         }
     }
@@ -747,7 +757,7 @@ bool StringUtil::IsLower( std::string_view str ) noexcept {
         return false;
     }
     for ( auto c : str ) {
-        if ( !std::islower( c ) ) {
+        if ( !std::islower( static_cast<unsigned char>( c ) ) ) {
             return false;
         }
     }
@@ -826,6 +836,226 @@ std::string StringUtil::SnakeToCamel( std::string_view str, bool upper_first ) n
 
     // 如果全部是下划线（如 "___"），则返回空
     return result;
+}
+
+const std::string &StringParser::MatchResult::Get( const std::string &name ) const {
+    static const std::string empty;
+    auto                     it = groups.find( name );
+    return it != groups.end() ? it->second : empty;
+}
+
+template <typename T>
+std::optional<T> StringParser::MatchResult::GetAs( const std::string &name ) const {
+    const auto &str = Get( name );
+    if ( str.empty() ) {
+        return std::nullopt;
+    }
+
+    std::string trimmed = StringUtil::Trim( str );
+
+    if constexpr ( std::is_same_v<T, std::string> ) {
+        return trimmed;
+    }
+    else if constexpr ( std::is_same_v<T, bool> ) {
+        std::string lower = StringUtil::ToLower( trimmed );
+        if ( lower == "1" || lower == "true" || lower == "on" || lower == "yes" )
+            return true;
+        if ( lower == "0" || lower == "false" || lower == "off" || lower == "no" )
+            return false;
+        return std::nullopt;
+    }
+    else if constexpr ( std::is_floating_point_v<T> ) {
+        try {
+            size_t pos   = 0;
+            double value = std::stod( trimmed, &pos );
+            if ( pos != trimmed.length() ) {
+                return std::nullopt;
+            }
+            if ( value < std::numeric_limits<T>::lowest() || value > std::numeric_limits<T>::max() ) {
+                return std::nullopt;
+            }
+            return static_cast<T>( value );
+        }
+        catch ( ... ) {
+            return std::nullopt;
+        }
+    }
+    else if constexpr ( std::is_integral_v<T> && std::is_signed_v<T> ) {
+        try {
+            size_t    pos   = 0;
+            long long value = std::stoll( trimmed, &pos, 10 );
+            if ( pos != trimmed.length() ) {
+                return std::nullopt;
+            }
+            if ( value < std::numeric_limits<T>::min() || value > std::numeric_limits<T>::max() ) {
+                return std::nullopt;
+            }
+            return static_cast<T>( value );
+        }
+        catch ( ... ) {
+            return std::nullopt;
+        }
+    }
+    else if constexpr ( std::is_integral_v<T> && std::is_unsigned_v<T> ) {
+        if ( trimmed.empty() || trimmed[0] == '-' ) {
+            return std::nullopt;
+        }
+        try {
+            size_t             pos   = 0;
+            unsigned long long value = std::stoull( trimmed, &pos, 10 );
+            if ( pos != trimmed.length() ) {
+                return std::nullopt;
+            }
+            if ( value > std::numeric_limits<T>::max() ) {
+                return std::nullopt;
+            }
+            return static_cast<T>( value );
+        }
+        catch ( ... ) {
+            return std::nullopt;
+        }
+    }
+    else {
+        // 不支持的类型
+        return std::nullopt;
+    }
+}
+template std::optional<std::string>        StringParser::MatchResult::GetAs( const std::string        &) const;
+template std::optional<bool>               StringParser::MatchResult::GetAs( const std::string               &) const;
+template std::optional<long long>          StringParser::MatchResult::GetAs( const std::string          &) const;
+template std::optional<unsigned long long> StringParser::MatchResult::GetAs( const std::string & ) const;
+template std::optional<float>              StringParser::MatchResult::GetAs( const std::string              &) const;
+template std::optional<double>             StringParser::MatchResult::GetAs( const std::string             &) const;
+template std::optional<int8_t>             StringParser::MatchResult::GetAs( const std::string             &) const;
+template std::optional<uint8_t>            StringParser::MatchResult::GetAs( const std::string            &) const;
+template std::optional<int16_t>            StringParser::MatchResult::GetAs( const std::string            &) const;
+template std::optional<uint16_t>           StringParser::MatchResult::GetAs( const std::string           &) const;
+template std::optional<int32_t>            StringParser::MatchResult::GetAs( const std::string            &) const;
+template std::optional<uint32_t>           StringParser::MatchResult::GetAs( const std::string           &) const;
+template std::optional<int64_t>            StringParser::MatchResult::GetAs( const std::string            &) const;
+template std::optional<uint64_t>           StringParser::MatchResult::GetAs( const std::string           &) const;
+
+class StringParser::Impl {
+public:
+    class ParseRule {
+    public:
+        explicit ParseRule( const std::string &rule_str ) : rule_str_( rule_str ) {}
+
+        ParseRule &GeneratePattern() {
+            // 已生成过则直接复用，避免每次 Parse 都重新编译正则
+            if ( generated_ ) {
+                return *this;
+            }
+
+            std::ostringstream pattern;
+            size_t             i = 0;
+            const size_t       n = rule_str_.length();
+
+            capture_names_.clear();
+
+            while ( i < n ) {
+                if ( rule_str_[i] == '{' ) {
+                    size_t j = i + 1;
+                    while ( j < n && rule_str_[j] != '}' ) {
+                        ++j;
+                    }
+                    if ( j >= n ) {
+                        throw std::invalid_argument( "Unclosed placeholder in template: " + rule_str_ );
+                    }
+
+                    std::string var_name = rule_str_.substr( i + 1, j - i - 1 );
+
+                    if ( var_name.empty() || !std::isalpha( var_name[0] ) ) {
+                        throw std::invalid_argument( "Invalid capture group name: '" + var_name + "'" );
+                    }
+
+                    // 记录变量名（按出现顺序）
+                    capture_names_.push_back( std::move( var_name ) );
+
+                    // 使用普通捕获组：([^,;\s]+)
+                    // pattern << "([^,;\\s]+)";
+                    pattern << "([^,;]*[^,;\\s])";
+                    i = j + 1;
+                }
+                else {
+                    char c = rule_str_[i];
+                    if ( std::strchr( ".^$*+?(){}[]|\\", c ) ) {
+                        pattern << '\\' << c;
+                    }
+                    else if ( c == ' ' ) {
+                        pattern << "\\s";
+                    }
+                    else {
+                        pattern << c;
+                    }
+                    ++i;
+                }
+            }
+
+            try {
+                pattern_ = std::regex( pattern.str(), std::regex_constants::ECMAScript );
+            }
+            catch ( const std::regex_error &e ) {
+                throw std::invalid_argument( "Invalid regex generated from template '" + rule_str_ + "': " + e.what() +
+                                             " (Pattern: " + pattern.str() + ")" );
+            }
+            generated_ = true;
+            return *this;
+        }
+
+        const std::string              &RuleString() const noexcept { return rule_str_; }
+        const std::regex               &Pattern() const noexcept { return pattern_; }
+        const std::vector<std::string> &CaptureNames() const noexcept { return capture_names_; }
+
+    private:
+        std::string              rule_str_;
+        std::regex               pattern_;
+        std::vector<std::string> capture_names_;
+        bool                     generated_ = false;
+    };
+
+    std::vector<ParseRule> rules;
+};
+StringParser::StringParser() : impl_( std::make_unique<Impl>() ) {}
+
+StringParser::~StringParser() {}
+
+StringParser &StringParser::AddRule( const std::string &rule ) {
+    impl_->rules.emplace_back( rule );
+    return *this;
+}
+
+std::vector<StringParser::MatchResult> StringParser::Parse( const std::string &text, std::string *error_msg ) const {
+    try {
+        std::vector<MatchResult> results;
+        for ( auto &rule : impl_->rules ) {
+            auto begin = std::sregex_iterator( text.begin(), text.end(), rule.GeneratePattern().Pattern() );
+            auto end   = std::sregex_iterator();
+
+            const auto &names = rule.CaptureNames();
+
+            for ( auto it = begin; it != end; ++it ) {
+                const std::smatch &match = *it;
+                MatchResult        result;
+
+                // 索引从 1 开始（0 是全匹配）
+                for ( size_t idx = 1; idx < match.size() && idx - 1 < names.size(); ++idx ) {
+                    if ( match[idx].matched ) {
+                        result.groups[names[idx - 1]] = match.str( idx );
+                    }
+                }
+
+                results.push_back( std::move( result ) );
+            }
+        }
+        return results;
+    }
+    catch ( const std::exception &e ) {
+        if ( error_msg ) {
+            *error_msg = e.what();
+        }
+        return {};
+    }
 }
 
 }  // namespace utils

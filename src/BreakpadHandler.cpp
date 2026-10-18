@@ -91,27 +91,42 @@ void CleanEmptyDir( const fs::path &root_path ) {
     if ( root_path.empty() ) {
         return;
     }
-    std::stack<fs::path> dir_stack;
+
+    // 先收集所有子目录，再按路径长度从深到浅尝试删除空目录
+    std::vector<fs::path> dirs;
+    std::stack<fs::path>  dir_stack;
     dir_stack.push( root_path );
-    try {
-        while ( !dir_stack.empty() ) {
-            fs::path current_path = dir_stack.top();
-            dir_stack.pop();
-            for ( const auto &entry : fs::directory_iterator( current_path ) ) {
-                if ( !entry.is_directory() ) {
-                    continue;
-                }
-                if ( fs::is_empty( entry.path() ) ) {
-                    fs::remove( entry.path() );
-                }
-                else {
-                    dir_stack.push( entry.path() );
-                }
+
+    while ( !dir_stack.empty() ) {
+        fs::path current_path = dir_stack.top();
+        dir_stack.pop();
+
+        std::error_code      iter_ec;
+        fs::directory_iterator it( current_path, iter_ec );
+        if ( iter_ec ) {
+            CONSOLE_LOG( "Error clean empty dir, reason: %s", iter_ec.message().c_str() );
+            continue;
+        }
+        for ( fs::directory_iterator end; it != end; it.increment( iter_ec ) ) {
+            if ( iter_ec ) {
+                CONSOLE_LOG( "Error clean empty dir, reason: %s", iter_ec.message().c_str() );
+                break;
+            }
+            std::error_code type_ec;
+            if ( it->is_directory( type_ec ) && !type_ec ) {
+                dirs.emplace_back( it->path() );
+                dir_stack.push( it->path() );
             }
         }
     }
-    catch ( const fs::filesystem_error &e ) {
-        CONSOLE_LOG( "Error clean empty dir, reason: %s", e.what() );
+
+    // 子目录路径必然长于其父目录，按路径长度降序排序即可保证先删子目录、再删父目录
+    std::sort( dirs.begin(), dirs.end(), []( const fs::path &lhs, const fs::path &rhs ) {
+        return lhs.string().size() > rhs.string().size();
+    } );
+    for ( const auto &dir : dirs ) {
+        std::error_code remove_ec;
+        fs::remove( dir, remove_ec );  // 非空目录删除失败即可，无需额外处理
     }
 }
 
@@ -122,20 +137,34 @@ namespace utils {
 class BreakpadHandler::BreakpadHandlerPrivate {
 public:
     void RecycleDumpFiles() {
-        auto max_size_mb = max_size * 1024 * 1024;
         try {
-            uintmax_t             total_size = 0;
-            std::vector<fs::path> files      = ForeachDir( dump_root_path, extension );
+            std::vector<fs::path> files = ForeachDir( dump_root_path, extension );
+            if ( files.size() <= 1 ) {
+                return;
+            }
+
+            std::error_code ec;
+            uintmax_t       total_size = 0;
             for ( auto &file : files ) {
-                total_size += fs::file_size( file );
+                auto size = fs::file_size( file, ec );
+                if ( !ec ) {
+                    total_size += size;
+                }
             }
             std::sort( files.begin(), files.end(), []( const fs::path &lhs, const fs::path &rhs ) {
                 return fs::last_write_time( lhs ) < fs::last_write_time( rhs );
             } );
-            while ( total_size > max_size_mb || files.size() > max_count && files.size() > 1 ) {
-                CONSOLE_LOG( "Remove dump file: %s", files.front().c_str() );
-                total_size -= fs::file_size( files.front() );
-                fs::remove( files.front() );
+
+            const uintmax_t max_bytes = max_size > 0 ? static_cast<uintmax_t>( max_size ) * 1024 * 1024 : 0;
+
+            // 修复原实现的条件优先级问题：容量或数量任一超限即触发回收（至少保留最后一个）
+            while ( ( total_size > max_bytes || files.size() > max_count ) && files.size() > 1 ) {
+                auto size = fs::file_size( files.front(), ec );
+                if ( !ec && size <= total_size ) {
+                    total_size -= size;
+                }
+                CONSOLE_LOG( "Remove dump file: %s", files.front().string().c_str() );
+                fs::remove( files.front(), ec );
                 files.erase( files.begin() );
             }
         }
@@ -165,15 +194,12 @@ public:
     fs::path                                           dump_root_path;
     std::string                                        dump_path;
     int64_t                                            max_size  = 5;
-    int32_t                                            max_count = 5;
+    uint32_t                                           max_count = 5;
 };
 
-BreakpadHandler::BreakpadHandler() : d( new BreakpadHandlerPrivate() ) {}
+BreakpadHandler::BreakpadHandler() : d( std::make_unique<BreakpadHandlerPrivate>() ) {}
 
-BreakpadHandler::~BreakpadHandler() {
-    delete d;
-    d = nullptr;
-}
+BreakpadHandler::~BreakpadHandler() = default;
 
 BreakpadHandler &BreakpadHandler::Instance() {
     static BreakpadHandler instance;
