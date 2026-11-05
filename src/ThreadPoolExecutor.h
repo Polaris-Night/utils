@@ -23,7 +23,7 @@ namespace utils {
  * 与 TaskScheduler 组合的语义：
  *   - 派发线程只入队，不被慢回调阻塞（Stop 也因此始终及时）；
  *   - 队列满时 Submit 返回 false（背压），调度器计入 reject_count，
- *     该触发在下次 AdvanceTo 时按迟到策略处理；
+ *     该触发在下次 Poll 时按迟到策略处理；
  *   - 执行器生命周期必须长于调度器（调度器不拥有执行器）；
  *   - coalesce = false 时同一任务的两回回调可能在不同线程并行，action 需线程安全。
  *

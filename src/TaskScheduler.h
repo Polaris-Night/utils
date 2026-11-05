@@ -190,9 +190,10 @@ private:
  *   - steady 轴（IntervalTrigger）：物理时长，免疫系统改时；
  *   - wall 轴（AtTrigger / CalendarTrigger）：日历真相，按 DateTime + 时区计算。
  *
- * 确定性推进：核心是 AdvanceTo(wall_now, steady_now) —— 内部不读时钟、不睡眠。
+ * 确定性推进：核心是 Poll(wall_now, steady_now) —— 内部不读时钟、不睡眠。
  * 线程适配（Start/Stop）与外部驱动（事件循环/游戏帧循环/测试）都只是它的驱动方式；
- * 构造时以真实时钟作为初始时间轴起点，确定性场景请先调用一次 AdvanceTo 设定起点。
+ * 同一时段只应选择一种驱动方式（不要同时 Start 又手动 Poll）。
+ * 构造时以真实时钟作为初始时间轴起点，确定性场景请先调用一次 Poll 设定起点。
  *
  * 执行语义：
  *   - 调度与执行分离：动作经 TaskExecutor 提交（默认 InlineExecutor 同步执行）；
@@ -230,14 +231,14 @@ public:
      *
      * @return std::optional<TaskId> 一次性任务已过期时返回 std::nullopt
      */
-    std::optional<TaskId> Add( std::shared_ptr<WallTrigger> trigger, Action action, TaskPolicy policy = {} );
+    std::optional<TaskId> Schedule( std::shared_ptr<WallTrigger> trigger, Action action, TaskPolicy policy = {} );
 
     /**
      * @brief 注册单调任务
      *
      * @return std::optional<TaskId> 触发器无后续触发时返回 std::nullopt
      */
-    std::optional<TaskId> Add( std::shared_ptr<SteadyTrigger> trigger, Action action, TaskPolicy policy = {} );
+    std::optional<TaskId> Schedule( std::shared_ptr<SteadyTrigger> trigger, Action action, TaskPolicy policy = {} );
 
     /**
      * @brief 取消任务（阻止后续触发；在途执行不中断）
@@ -270,15 +271,16 @@ public:
      * @param steady_now 单调时钟当前时刻
      * @return std::size_t 本次提交执行的动作数量
      */
-    std::size_t AdvanceTo( const Timestamp &wall_now, const SteadyTime &steady_now );
+    std::size_t Poll( const Timestamp &wall_now, const SteadyTime &steady_now );
 
-    // ---- 线程适配器（可选；核心 AdvanceTo 已可独立工作）----
+    // ---- 线程适配器（可选；核心 Poll 已可独立工作）----
 
     /**
      * @brief 启动线程适配器（幂等）
      *
      * 单 worker 只负责派发：按两条时间轴中最近的 deadline 等待，
-     * add/cancel/stop 会唤醒并重算等待；到点调用 AdvanceTo 推进核心。
+     * add/cancel/stop 会唤醒并重算等待；到点调用 Poll 推进核心。
+     * 注意：与手动 Poll 互斥——同一时段只用一种驱动方式。
      */
     void Start();
 

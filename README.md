@@ -13,6 +13,7 @@ C++17 通用工具库（静态库 `utils`）：文件与字符串处理、时区
 - [环境要求](#环境要求)
 - [构建](#构建)
 - [使用](#使用)
+- [API 文档](#api-文档)
 - [测试](#测试)
 - [安装](#安装)
 - [项目结构](#项目结构)
@@ -25,7 +26,7 @@ C++17 通用工具库（静态库 `utils`）：文件与字符串处理、时区
 
 - **时间基础设施**：时区感知的 `DateTime`（Local / UTC / 固定偏移、ISO 8601、日历运算）；`TaskScheduler` 双时间轴调度
   （steady 间隔 + wall 日历）；`ThreadPoolExecutor` 提供异步执行
-- **确定性核心**：调度由 `AdvanceTo( wall_now, steady_now )` 驱动，核心测试无需 sleep；线程适配器与线程池均为可选注入
+- **确定性核心**：调度由 `Poll( wall_now, steady_now )` 驱动，核心测试无需 sleep；线程适配器与线程池均为可选注入
 - **明确的 DST 策略**：春季不存在的时刻跳过、秋季重复时刻只触发较早一次、月度缺日跳过该月
 - **统一命名**：解析/转换类函数一律 `ToXXX` / `FromXXX`；时间单位使用普通枚举，便于与整型互转
 - **严格构建**：本工程目标统一启用 `-Wall -Wextra -Wpedantic -Wshadow -Wconversion`，零告警；
@@ -46,9 +47,10 @@ C++17 通用工具库（静态库 `utils`）：文件与字符串处理、时区
 | `StringParser` | `StringUtil.h` | 基于模板规则（如 `name={name},age={age}`）的文本解析与取值 |
 | `DateTime` | `DateTime.h` | 时区感知的日期时间值类型，`ToXXX`/`FromXXX` 转换矩阵：chrono / `time_t` / `tm` / Unix 秒-毫秒-微秒-纳秒 / 字符串（strftime 风格 + ISO 8601）；日历加法与周期边界（`Add` / `StartOf` / `EndOf`）、按粒度比较；服务器时间种子（抗系统时间篡改） |
 | `Timer` / `ElapsedTimer` | `Timer.h` | 超时判定与累计计时 |
-| `TaskScheduler` | `TaskScheduler.h` | 时间驱动任务调度器：双时间轴、`AdvanceTo` 确定性推进、线程适配器（`Start`/`Stop`）、触发器（一次性 / 固定周期 / 每日-每周-每月日历 / 自定义）、迟到策略（CatchUp / Skip + grace）、coalesce、抖动、任务统计 |
+| `TaskScheduler` | `TaskScheduler.h` | 时间驱动任务调度器：双时间轴、`Poll` 确定性推进、线程适配器（`Start`/`Stop`）、触发器（一次性 / 固定周期 / 每日-每周-每月日历 / 自定义）、迟到策略（CatchUp / Skip + grace）、coalesce、抖动、任务统计 |
 | `TaskExecutor` / `ThreadPoolExecutor` | `TaskExecutor.h` / `ThreadPoolExecutor.h` | 执行器接口（默认同步 `InlineExecutor`）与工作线程池（仅入队不阻塞派发、有界队列背压、析构排空后 join） |
-| `SlidingWindow` | `SlidingWindow.h` | 泛型滑动窗口族：`CountWindow`、`TimeWindow`、`ThresholdWindow`、`SessionWindow`、`PredicateWindow`，统一 `OnAdd`/`OnRemove` 回调 |
+| `SlidingWindow` | `SlidingWindow.h` | 泛型滑动窗口族：`RuleWindow` 为统一引擎（组合时间/条数/权重），`CountWindow`、`TimeWindow`、`ThresholdWindow` 是其单维度特例，另有 `SessionWindow`、`PredicateWindow`；统一 `OnAdd`/`OnRemove` 回调；`Poll(now)` 缺席驱动（空闲时也能裁剪/结束会话；无时间维度时为空操作），会话经 `OnClose`、条件拒绝经 `OnReject` 通知 |
+| `WindowPolicy` / `TumblingWindow` / `RuleWindow` | `WindowPolicy.h` / `TumblingWindow.h` / `SlidingWindow.h` | 统一的窗口规则词汇（时间/条数/权重/会话/谓词/自定义，`Any`/`All` 组合）与两种解释：`TumblingWindow` 条件命中即收尾（`Add` 数据驱动 / `Poll(now)` 缺席驱动 / `Close` 显式收尾，支持空桶输出与追赶上限）；`RuleWindow` 条件越界即淘汰（可叠加"最近 N 秒且最多 M 条、总权重不超过 W"） |
 | `Result` | `Result.h` | `Result<T, E>` / `Result<void, E>` 错误处理类型（`Map` / `AndThen` 链式变换） |
 | `ResourceGuard` | `ResourceGuard.h` | RAII 资源守卫 |
 | `ConsumableOptional` | `ConsumableOptional.h` | 一次性消费的可选值，支持线程安全模式 |
@@ -177,7 +179,7 @@ ThreadPoolExecutor pool( 2 );   // 回调异步执行；不注入执行器则默
 TaskScheduler      scheduler( pool );
 
 // 间隔任务：每秒一次（steady 轴，固定网格不漂移）
-auto id = scheduler.Add(
+auto id = scheduler.Schedule(
     std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ) ),
     []( const DateTime &scheduled ) { std::cout << "tick " << scheduled.ToIso8601() << '\n'; } );
 if ( !id ) {
@@ -185,7 +187,7 @@ if ( !id ) {
 }
 
 // 日历任务：每天 09:30（wall 轴，按指定时区）
-scheduler.Add( std::make_shared<CalendarTrigger>( CalendarTrigger::Daily( 9, 30 ) ),
+scheduler.Schedule( std::make_shared<CalendarTrigger>( CalendarTrigger::Daily( 9, 30 ) ),
                []( const DateTime & ) { std::cout << "daily\n"; } );
 
 scheduler.Start();
@@ -197,13 +199,27 @@ if ( auto stats = scheduler.GetTaskStats( *id ) ) {
 }
 ```
 
-> 确定性核心：不调用 `Start()` 时，用 `AdvanceTo( wall_now, steady_now )` 手动推进即可在测试中精确控制时间，无需 sleep。
+> 确定性核心：不调用 `Start()` 时，用 `Poll( wall_now, steady_now )` 手动推进即可在测试中精确控制时间，无需 sleep。
+
+## API 文档
+
+完整 API 参考（逐类型、逐函数、参数语义、异常与线程安全约定）见 **[docs/](docs/README.md)**：
+
+| 文档 | 覆盖内容 |
+| --- | --- |
+| [日期与时间](docs/datetime.md) | `DateTime`、`TimeZone`、时间单位、解析/格式化、日历运算、按粒度比较 |
+| [字符串](docs/string.md) | `StringUtil`、`StringFormatter`、`StringParser` |
+| [文件与归档](docs/filesystem.md) | `File`、`FileUtil`、`LockedFile`、`TarUtil` |
+| [任务调度](docs/task-scheduler.md) | `TaskScheduler`、触发器、`TaskPolicy`、执行器、确定性 `Poll` |
+| [窗口](docs/windows.md) | `WindowPolicy`、`TumblingWindow`、`SlidingWindow` 族 |
+| [并发与计时](docs/concurrency.md) | `ThreadPoolExecutor`、`Timer`、`ElapsedTimer`、`Throttler`、`ConsumableOptional`、`SingleTrigger` |
+| [通用工具](docs/utilities.md) | `Result`、`Compare`、`ResourceGuard`、`Macros`、`Pimpl`、`BreakpadHandler` |
 
 ## 测试
 
 ```bash
 cd build
-ctest -j"$(nproc)"                   # 全量（当前 21 个套件 / 211 个用例）
+ctest -j"$(nproc)"                   # 全量（当前 23 个套件 / 243 个用例）
 ctest -R ThreadPoolExecutorTest      # 按套件/用例名筛选
 ./test/main --gtest_brief=1          # 也可直接运行测试二进制
 ./test/main --gtest_filter='TaskSchedulerTest.*'
@@ -241,6 +257,7 @@ utils/
 ├── cmake/
 │   └── BuildBreakpad.cmake   # 内置 Breakpad 的构建规则
 ├── src/                      # 库源码与公共头文件（平铺，按文件名 include）
+├── docs/                     # API 参考文档（按模块分页）
 ├── test/                     # GoogleTest 用例
 │   └── test_breakpad/        # 崩溃注入用例
 ├── third_party/              # breakpad、GitHash（随仓库内置）
@@ -253,9 +270,14 @@ utils/
 
 - **命名**：解析/转换类函数统一 `ToXXX` / `FromXXX`；类型名 `PascalCase`；成员变量以 `_` 结尾
 - **时间**：时间单位使用普通枚举而非 `enum class`，便于与整型互转；`DateTime` 默认本地时区
-- **调度器**：确定性核心（`AdvanceTo`）与线程适配器（`Start` / `Stop`）解耦，执行器可注入；
+- **调度器**：确定性核心（`Poll`）与线程适配器（`Start` / `Stop`）解耦，执行器可注入；
   迟到策略为 `CatchUp` / `Skip`
-- **回调纪律**：用户回调一律在锁外执行，回调抛出的异常被吞掉，不允许拖垮调度器
+- **接口动词**：`Add`（喂数据）/ `Schedule`（注册任务）/ `Poll(now)`（推进时间并处理到期）/ `Close`（显式收尾）/ `Clear`（丢弃）——同一角色在三个组件中同名同义
+- **窗口驱动**：`Add`（数据驱动）与 `Poll(now)`（缺席驱动）并列，`Close`（滚动窗口显式收尾）
+  为第三条入口；时间不是唯一的驱动源——条数、字节/权重、会话间隙、谓词、自定义条件同样可驱动
+- **窗口规则**：两族共享 `WindowPolicy` 的维度词汇——滚动窗口"命中即收尾"，
+  组合规则窗口"越界即淘汰"；条件可按 `Any` / `All` 组合
+- **回调纪律**：用户回调一律在锁外执行；调度器吞掉回调异常以保护派发循环，窗口的回调异常则向调用者传播
 - **头文件**：`#pragma once`；公共头文件平铺在 `src/`，互相以 `#include "Xxx.h"` 引用
 - **格式**：4 空格缩进、大括号换行（Allman），与现有代码保持一致
 

@@ -219,7 +219,7 @@ void TaskScheduler::RunLoop() {
         if ( has_deadline && deadline <= steady_now ) {
             // 到点：锁外推进核心（内部自会加锁；绝不持锁执行用户代码）
             lock.unlock();
-            AdvanceTo( WallNow(), std::chrono::steady_clock::now() );
+            Poll( WallNow(), std::chrono::steady_clock::now() );
             lock.lock();
             continue;
         }
@@ -236,7 +236,7 @@ void TaskScheduler::RunLoop() {
     exit_cv_.notify_all();
 }
 
-std::optional<TaskId> TaskScheduler::Add( std::shared_ptr<WallTrigger> trigger, Action action, TaskPolicy policy ) {
+std::optional<TaskId> TaskScheduler::Schedule( std::shared_ptr<WallTrigger> trigger, Action action, TaskPolicy policy ) {
     if ( !trigger || !action ) {
         return std::nullopt;
     }
@@ -269,7 +269,7 @@ std::optional<TaskId> TaskScheduler::Add( std::shared_ptr<WallTrigger> trigger, 
     return task->id;
 }
 
-std::optional<TaskId> TaskScheduler::Add( std::shared_ptr<SteadyTrigger> trigger, Action action, TaskPolicy policy ) {
+std::optional<TaskId> TaskScheduler::Schedule( std::shared_ptr<SteadyTrigger> trigger, Action action, TaskPolicy policy ) {
     if ( !trigger || !action ) {
         return std::nullopt;
     }
@@ -354,7 +354,7 @@ std::optional<TaskScheduler::TaskStats> TaskScheduler::GetTaskStats( TaskId id )
     return stats;
 }
 
-std::size_t TaskScheduler::AdvanceTo( const Timestamp &wall_now, const SteadyTime &steady_now ) {
+std::size_t TaskScheduler::Poll( const Timestamp &wall_now, const SteadyTime &steady_now ) {
     std::vector<PendingJob> jobs;
 
     {

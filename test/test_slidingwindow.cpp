@@ -361,13 +361,13 @@ TEST( SessionWindowTest, FlushClosesCurrentSession ) {
         removed_total += static_cast<int>( items.size() );
     } );
 
-    auto flushed = window.Flush();
+    auto flushed = window.Close();
     ASSERT_EQ( flushed.size(), 2u );
     EXPECT_TRUE( window.Empty() );
     EXPECT_EQ( removed_total, 2 );
 
     // 空会话 Flush：返回空且不触发回调
-    auto empty_flush = window.Flush();
+    auto empty_flush = window.Close();
     EXPECT_TRUE( empty_flush.empty() );
     EXPECT_EQ( removed_total, 2 );
 }
@@ -377,17 +377,24 @@ TEST( SessionWindowTest, ClearClosesSession ) {
     window.Add( { 1, 0 } );
 
     int removed_total = 0;
+    int closed_total  = 0;
     window.OnRemove( [&]( const SlidingWindow<Event>::ItemList &items ) {
         removed_total += static_cast<int>( items.size() );
     } );
+    window.OnClose( [&]( const SlidingWindow<Event>::ItemList &items ) {
+        closed_total += static_cast<int>( items.size() );
+    } );
 
-    window.Clear();
+    window.Clear();  // 放弃会话：只通知移除，不算“会话完成”
     EXPECT_TRUE( window.Empty() );
     EXPECT_EQ( removed_total, 1 );
+    EXPECT_EQ( closed_total, 0 );
 
-    // 清空后新会话重新开始
+    // 清空后新会话重新开始；正常结束才触发 OnClose
     window.Add( { 2, 50 } );
     EXPECT_EQ( window.Size(), 1u );
+    (void)window.Close();
+    EXPECT_EQ( closed_total, 1 );
 }
 
 // ============================ PredicateWindow ============================
@@ -464,4 +471,131 @@ TEST( SlidingWindowTest, PolymorphicUsage ) {
     base.Clear();
     EXPECT_TRUE( base.Empty() );
     EXPECT_EQ( removed, ( std::vector<int>{ 1, 2, 3 } ) );
+}
+
+// ============================ 缺席驱动（Poll）与通道 ============================
+
+TEST( TimeWindowTest, PollPrunesWithoutNewData ) {
+    TimeWindow<int, SteadyPoint> window( std::chrono::seconds( 10 ),
+                                         []( int v ) { return At( v ); } );
+    std::vector<int> removed;
+    window.OnRemove( [&]( const SlidingWindow<int>::ItemList &items ) {
+        removed.insert( removed.end(), items.begin(), items.end() );
+    } );
+
+    window.Add( 10 );
+    window.Add( 20 );
+    EXPECT_EQ( window.Size(), 2u );
+
+    // 只推进时间、不喂数据：过期数据也应被淘汰
+    EXPECT_EQ( window.Poll( At( 25 ) ), 1u );
+    EXPECT_EQ( window.Size(), 1u );
+    EXPECT_EQ( removed, ( std::vector<int>{ 10 } ) );
+    EXPECT_EQ( *window.LatestTime(), At( 20 ) );
+
+    window.Poll( At( 100 ) );
+    EXPECT_TRUE( window.Empty() );
+    EXPECT_EQ( removed, ( std::vector<int>{ 10, 20 } ) );
+
+    // 回拨时间不应让已淘汰的数据复活，也不应报错
+    window.Poll( At( 5 ) );
+    EXPECT_TRUE( window.Empty() );
+}
+
+TEST( TimeWindowTest, KeyFnCalledOncePerItem ) {
+    int calls = 0;
+    TimeWindow<int, SteadyPoint> window( std::chrono::seconds( 100 ),
+                                         [&calls]( int v ) {
+                                             ++calls;
+                                             return At( v );
+                                         } );
+
+    for ( int i = 1; i <= 5; ++i ) {
+        window.Add( i );
+    }
+    EXPECT_EQ( calls, 5 );  // 每条只调用一次 key_fn
+
+    (void)window.LatestTime();
+    (void)window.Query( At( 2 ), At( 4 ) );
+    window.Poll( At( 50 ) );
+    EXPECT_EQ( calls, 5 );  // 查询/裁剪全部使用缓存
+}
+
+TEST( SessionWindowTest, PollClosesIdleSession ) {
+    SessionWindow<Event, long long> window( 1000, []( const Event &e ) { return e.ts; } );
+
+    int                              close_batches = 0;
+    std::size_t                      closed_items  = 0;
+    std::vector<std::size_t>         close_sizes;
+    window.OnClose( [&]( const SlidingWindow<Event>::ItemList &items ) {
+        ++close_batches;
+        closed_items += items.size();
+        close_sizes.push_back( items.size() );
+    } );
+
+    window.Add( { 1, 0 } );
+    window.Add( { 2, 100 } );
+
+    window.Poll( 500 );  // 未超时：不结束
+    EXPECT_EQ( window.Size(), 2u );
+    EXPECT_EQ( close_batches, 0 );
+
+    EXPECT_EQ( window.Poll( 2000 ), 1u );  // 距 100 已 1900 > 1000：主动结束会话
+    EXPECT_TRUE( window.Empty() );
+    EXPECT_EQ( close_batches, 1 );
+    EXPECT_EQ( closed_items, 2u );
+
+    window.Poll( 5000 );  // 空会话：不重复通知
+    EXPECT_EQ( close_batches, 1 );
+}
+
+TEST( PredicateWindowTest, RejectNotifiesBreakingItem ) {
+    PredicateWindow<int> window( []( int x ) { return x > 0; } );
+
+    std::vector<int> rejected;
+    window.OnReject( [&rejected]( const int &value ) { rejected.push_back( value ); } );
+
+    window.Add( 1 );
+    window.Add( -7 );
+
+    ASSERT_EQ( rejected.size(), 1u );
+    EXPECT_EQ( rejected[0], -7 );
+    EXPECT_TRUE( window.Empty() );
+}
+
+TEST( CountWindowTest, RegisteringListenerInsideCallbackIsSafe ) {
+    CountWindow<int> window( 10 );
+    int              outer = 0;
+    int              inner = 0;
+
+    window.OnAdd( [&]( const SlidingWindow<int>::ItemList & ) {
+        ++outer;
+        window.OnAdd( [&inner]( const SlidingWindow<int>::ItemList & ) { ++inner; } );
+    } );
+
+    window.Add( 1 );  // 本次事件：新监听尚未生效
+    EXPECT_EQ( outer, 1 );
+    EXPECT_EQ( inner, 0 );
+
+    window.Add( 2 );  // 下一事件：新监听生效
+    EXPECT_EQ( outer, 2 );
+    EXPECT_EQ( inner, 1 );
+}
+
+TEST( CountWindowTest, ZeroCapacityPassesThrough ) {
+    CountWindow<int> window( 0 );  // 容量 0：数据即进即出
+    std::vector<int> added;
+    std::vector<int> removed;
+    window.OnAdd( [&added]( const SlidingWindow<int>::ItemList &items ) {
+        added.insert( added.end(), items.begin(), items.end() );
+    } );
+    window.OnRemove( [&removed]( const SlidingWindow<int>::ItemList &items ) {
+        removed.insert( removed.end(), items.begin(), items.end() );
+    } );
+
+    window.Add( 1 );
+
+    EXPECT_TRUE( window.Empty() );
+    EXPECT_EQ( added, ( std::vector<int>{ 1 } ) );
+    EXPECT_EQ( removed, ( std::vector<int>{ 1 } ) );
 }

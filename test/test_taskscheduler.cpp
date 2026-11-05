@@ -46,20 +46,20 @@ public:
 
 TEST( TaskSchedulerTest, IntervalFiresOnFixedGrid ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );  // 设定时间轴起点
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );  // 设定时间轴起点
 
     int  fire_count = 0;
-    auto id         = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::seconds( 5 ), kSteady0 ),
+    auto id         = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::seconds( 5 ), kSteady0 ),
                                      [&]( const DateTime & ) { ++fire_count; } );
     ASSERT_TRUE( id.has_value() );
     EXPECT_EQ( scheduler.TaskCount(), 1u );
 
     // 未到点：不触发
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::milliseconds( 4999 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::milliseconds( 4999 ) );
     EXPECT_EQ( fire_count, 0 );
 
     // 到点：触发
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 5 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 5 ) );
     EXPECT_EQ( fire_count, 1 );
 
     // 下次触发 = 网格点 10s（锚点换算的墙钟）
@@ -68,7 +68,7 @@ TEST( TaskSchedulerTest, IntervalFiresOnFixedGrid ) {
     EXPECT_EQ( next->ToTimestamp(), WallUtc( 2024, 1, 1 ) + std::chrono::seconds( 10 ) );
 
     // 石英钟推进：一次推进跨越两个网格点 → 只补跑一次（合并错过点），并重新对齐到 20s
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 15 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 15 ) );
     EXPECT_EQ( fire_count, 2 );
 
     const auto catch_up = scheduler.NextFireTime( *id );
@@ -78,15 +78,15 @@ TEST( TaskSchedulerTest, IntervalFiresOnFixedGrid ) {
 
 TEST( TaskSchedulerTest, LateBeyondGraceRunsOnceByDefault ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );
 
     int  fire_count = 0;
-    auto id         = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::seconds( 5 ), kSteady0 ),
+    auto id         = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::seconds( 5 ), kSteady0 ),
                                      [&]( const DateTime & ) { ++fire_count; } );
     ASSERT_TRUE( id );
 
     // 模拟阻塞 17 秒：已错过 5s/10s/15s 三个点
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 17 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 17 ) );
     EXPECT_EQ( fire_count, 1 );  // CatchUp：只补跑一次
 
     const auto next = scheduler.NextFireTime( *id );
@@ -102,23 +102,23 @@ TEST( TaskSchedulerTest, LateBeyondGraceRunsOnceByDefault ) {
 
 TEST( TaskSchedulerTest, LateSkipPolicy ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );
 
     TaskPolicy policy;
     policy.late  = LatePolicy::Skip;
     policy.grace = std::chrono::seconds( 2 );
 
     int  fire_count = 0;
-    auto id         = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::seconds( 5 ), kSteady0 ),
+    auto id         = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::seconds( 5 ), kSteady0 ),
                                      [&]( const DateTime & ) { ++fire_count; }, policy );
     ASSERT_TRUE( id );
 
     // 迟到 1 秒（容忍窗口内）：正常执行
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 6 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 6 ) );
     EXPECT_EQ( fire_count, 1 );
 
     // 迟到 6 秒（超过窗口）：跳过本次
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 16 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 16 ) );
     EXPECT_EQ( fire_count, 1 );  // 10s 的点被跳过
 
     const auto stats = scheduler.GetTaskStats( *id );
@@ -137,21 +137,21 @@ TEST( TaskSchedulerTest, LateSkipPolicy ) {
 
 TEST( TaskSchedulerTest, OneShotFiresOnceAndCompletes ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );
 
     const auto fire_at  = WallUtc( 2024, 1, 1, 12, 0, 0 );
     int        fires    = 0;
-    auto       id       = scheduler.Add( std::make_shared<AtTrigger>( DateTime( fire_at, TimeZone::Utc() ) ),
+    auto       id       = scheduler.Schedule( std::make_shared<AtTrigger>( DateTime( fire_at, TimeZone::Utc() ) ),
                                          [&]( const DateTime &scheduled ) {
                                              ++fires;
                                              EXPECT_EQ( scheduled.ToTimestamp(), fire_at );
                                          } );
     ASSERT_TRUE( id.has_value() );
 
-    scheduler.AdvanceTo( fire_at - std::chrono::seconds( 1 ), kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( fire_at - std::chrono::seconds( 1 ), kSteady0 + std::chrono::seconds( 1 ) );
     EXPECT_EQ( fires, 0 );
 
-    scheduler.AdvanceTo( fire_at, kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( fire_at, kSteady0 + std::chrono::seconds( 1 ) );
     EXPECT_EQ( fires, 1 );
 
     // 一次性任务完成后：无下次触发、不再计入计划数
@@ -159,7 +159,7 @@ TEST( TaskSchedulerTest, OneShotFiresOnceAndCompletes ) {
     EXPECT_EQ( scheduler.TaskCount(), 0u );
 
     // 已过期的一次性任务无法注册
-    EXPECT_FALSE( scheduler.Add( std::make_shared<AtTrigger>( DateTime( fire_at, TimeZone::Utc() ) ),
+    EXPECT_FALSE( scheduler.Schedule( std::make_shared<AtTrigger>( DateTime( fire_at, TimeZone::Utc() ) ),
                                  []( const DateTime & ) {} ).has_value() );
 
     // 已完成任务取消：无计划可取消
@@ -173,21 +173,21 @@ TEST( TaskSchedulerTest, OneShotFiresOnceAndCompletes ) {
 
 TEST( TaskSchedulerTest, CancelStopsFutureFires ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );
 
     int  fires = 0;
-    auto id    = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
+    auto id    = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
                                 [&]( const DateTime & ) { ++fires; } );
     ASSERT_TRUE( id );
 
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) );
     EXPECT_EQ( fires, 1 );
 
     EXPECT_TRUE( scheduler.Cancel( *id ) );
     EXPECT_FALSE( scheduler.NextFireTime( *id ).has_value() );
     EXPECT_EQ( scheduler.TaskCount(), 0u );
 
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 100 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 100 ) );
     EXPECT_EQ( fires, 1 );  // 取消后不再触发
 
     EXPECT_FALSE( scheduler.Cancel( *id ) );  // 未知 id
@@ -198,17 +198,17 @@ TEST( TaskSchedulerTest, CancelStopsFutureFires ) {
 TEST( TaskSchedulerTest, CoalesceSkipsWhileInFlight ) {
     QueuedExecutor executor;
     TaskScheduler  scheduler( executor );
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );
 
     int  fires = 0;
-    auto id    = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
+    auto id    = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
                                 [&]( const DateTime & ) { ++fires; } );
     ASSERT_TRUE( id );
 
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) );
     ASSERT_EQ( executor.jobs.size(), 1u );  // 第 1 次已提交（在途）
 
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 2 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 2 ) );
     EXPECT_EQ( executor.jobs.size(), 1u );  // 在途未完成 → 跳过本次
 
     auto stats = scheduler.GetTaskStats( *id );
@@ -221,7 +221,7 @@ TEST( TaskSchedulerTest, CoalesceSkipsWhileInFlight ) {
     executor.jobs.clear();
     EXPECT_EQ( fires, 1 );
 
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 3 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 3 ) );
     EXPECT_EQ( executor.jobs.size(), 1u );  // 恢复提交
     stats = scheduler.GetTaskStats( *id );
     ASSERT_TRUE( stats.has_value() );
@@ -231,18 +231,18 @@ TEST( TaskSchedulerTest, CoalesceSkipsWhileInFlight ) {
 TEST( TaskSchedulerTest, CoalesceDisabledAllowsOverlap ) {
     QueuedExecutor executor;
     TaskScheduler  scheduler( executor );
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );
 
     TaskPolicy policy;
     policy.coalesce = false;
 
     int  fires = 0;
-    auto id    = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
+    auto id    = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
                                 [&]( const DateTime & ) { ++fires; }, policy );
     ASSERT_TRUE( id );
 
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) );
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 2 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 2 ) );
     EXPECT_EQ( executor.jobs.size(), 2u );  // 允许并行在途
 
     const auto stats = scheduler.GetTaskStats( *id );
@@ -259,13 +259,13 @@ TEST( TaskSchedulerTest, ExecutorRejectionCountsAsBackpressure ) {
 
     RejectingExecutor rejecting;
     TaskScheduler     scheduler( rejecting );
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );
 
-    auto id = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
+    auto id = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
                              []( const DateTime & ) {} );
     ASSERT_TRUE( id );
 
-    const auto fired = scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) );
+    const auto fired = scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) );
     EXPECT_EQ( fired, 0u );
 
     const auto stats = scheduler.GetTaskStats( *id );
@@ -276,17 +276,17 @@ TEST( TaskSchedulerTest, ExecutorRejectionCountsAsBackpressure ) {
 
 TEST( TaskSchedulerTest, ActionExceptionsAreSwallowed ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 );
 
     int  fires = 0;
-    auto id    = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
+    auto id    = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::seconds( 1 ), kSteady0 ),
                                 [&]( const DateTime & ) {
                                     ++fires;
                                     throw std::runtime_error( "boom" );
                                 } );
     ASSERT_TRUE( id );
 
-    EXPECT_NO_THROW( scheduler.AdvanceTo( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) ) );
+    EXPECT_NO_THROW( scheduler.Poll( WallUtc( 2024, 1, 1 ), kSteady0 + std::chrono::seconds( 1 ) ) );
     EXPECT_EQ( fires, 1 );
 
     const auto stats = scheduler.GetTaskStats( *id );
@@ -305,10 +305,10 @@ TEST( TaskSchedulerTest, UnknownTaskQueriesReturnNullopt ) {
 
 TEST( TaskSchedulerTest, CalendarDaily ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1, 10, 0 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1, 10, 0 ), kSteady0 );
 
     int  fires = 0;
-    auto id    = scheduler.Add( std::make_shared<CalendarTrigger>(
+    auto id    = scheduler.Schedule( std::make_shared<CalendarTrigger>(
                                     CalendarTrigger::Daily( 9, 30, 0, TimeZone::Utc() ) ),
                                 [&]( const DateTime &scheduled ) {
                                     ++fires;
@@ -322,7 +322,7 @@ TEST( TaskSchedulerTest, CalendarDaily ) {
     ASSERT_TRUE( next.has_value() );
     EXPECT_EQ( next->ToTimestamp(), WallUtc( 2024, 1, 2, 9, 30 ) );
 
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 2, 9, 30 ), kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 2, 9, 30 ), kSteady0 + std::chrono::seconds( 1 ) );
     EXPECT_EQ( fires, 1 );
 
     // 下一天
@@ -333,10 +333,10 @@ TEST( TaskSchedulerTest, CalendarDaily ) {
 
 TEST( TaskSchedulerTest, CalendarDailySameDayAndOffsetZone ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1, 9, 0 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1, 9, 0 ), kSteady0 );
 
     // 当天 9:30 尚未到 → 当天 9:30
-    auto id = scheduler.Add( std::make_shared<CalendarTrigger>(
+    auto id = scheduler.Schedule( std::make_shared<CalendarTrigger>(
                                  CalendarTrigger::Daily( 9, 30, 0, TimeZone::Utc() ) ),
                              []( const DateTime & ) {} );
     ASSERT_TRUE( id );
@@ -345,7 +345,7 @@ TEST( TaskSchedulerTest, CalendarDailySameDayAndOffsetZone ) {
     EXPECT_EQ( next->ToTimestamp(), WallUtc( 2024, 1, 1, 9, 30 ) );
 
     // 固定偏移时区：+08:00 的每日 02:30 = 前一日 18:30 UTC
-    auto offset_id = scheduler.Add( std::make_shared<CalendarTrigger>(
+    auto offset_id = scheduler.Schedule( std::make_shared<CalendarTrigger>(
                                         CalendarTrigger::Daily( 2, 30, 0, TimeZone::OffsetMinutes( 480 ) ) ),
                                     []( const DateTime & ) {} );
     ASSERT_TRUE( offset_id );
@@ -356,9 +356,9 @@ TEST( TaskSchedulerTest, CalendarDailySameDayAndOffsetZone ) {
 
 TEST( TaskSchedulerTest, CalendarWeekly ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1, 0, 0 ), kSteady0 );  // 周一
+    scheduler.Poll( WallUtc( 2024, 1, 1, 0, 0 ), kSteady0 );  // 周一
 
-    auto id = scheduler.Add( std::make_shared<CalendarTrigger>(
+    auto id = scheduler.Schedule( std::make_shared<CalendarTrigger>(
                                  CalendarTrigger::Weekly( Wednesday, 8, 0, 0, TimeZone::Utc() ) ),
                              []( const DateTime & ) {} );
     ASSERT_TRUE( id );
@@ -370,7 +370,7 @@ TEST( TaskSchedulerTest, CalendarWeekly ) {
     EXPECT_EQ( next->GetWeekday(), Wednesday );
 
     // 周三 8:00 触发后 → 下周三
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 3, 8, 0 ), kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 3, 8, 0 ), kSteady0 + std::chrono::seconds( 1 ) );
     next = scheduler.NextFireTime( *id );
     ASSERT_TRUE( next.has_value() );
     EXPECT_EQ( next->ToTimestamp(), WallUtc( 2024, 1, 10, 8, 0 ) );
@@ -378,9 +378,9 @@ TEST( TaskSchedulerTest, CalendarWeekly ) {
 
 TEST( TaskSchedulerTest, CalendarMonthlySkipsMissingDay ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 15 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 15 ), kSteady0 );
 
-    auto id = scheduler.Add( std::make_shared<CalendarTrigger>(
+    auto id = scheduler.Schedule( std::make_shared<CalendarTrigger>(
                                  CalendarTrigger::Monthly( 31, 6, 0, 0, TimeZone::Utc() ) ),
                              []( const DateTime & ) {} );
     ASSERT_TRUE( id );
@@ -391,7 +391,7 @@ TEST( TaskSchedulerTest, CalendarMonthlySkipsMissingDay ) {
     EXPECT_EQ( next->ToTimestamp(), WallUtc( 2024, 1, 31, 6, 0 ) );
 
     // 1 月 31 日之后 → 2 月没有 31 日 → 3 月 31 日
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 31, 6, 0 ), kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( WallUtc( 2024, 1, 31, 6, 0 ), kSteady0 + std::chrono::seconds( 1 ) );
     next = scheduler.NextFireTime( *id );
     ASSERT_TRUE( next.has_value() );
     EXPECT_EQ( next->ToTimestamp(), WallUtc( 2024, 3, 31, 6, 0 ) );
@@ -399,12 +399,12 @@ TEST( TaskSchedulerTest, CalendarMonthlySkipsMissingDay ) {
 
 TEST( TaskSchedulerTest, FunctionalWallTrigger ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1, 0, 0 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1, 0, 0 ), kSteady0 );
 
     // 每 2 小时一次（自定义规则）
     auto trigger = std::make_shared<FunctionalWallTrigger>(
         []( const DateTime &after ) { return std::optional<DateTime>( after.Add<Hours>( 2 ) ); } );
-    auto id = scheduler.Add( trigger, []( const DateTime & ) {} );
+    auto id = scheduler.Schedule( trigger, []( const DateTime & ) {} );
     ASSERT_TRUE( id );
 
     auto next = scheduler.NextFireTime( *id );
@@ -452,9 +452,9 @@ TEST( TaskSchedulerTest, DstSpringForwardSkipsNonexistent ) {
     TaskScheduler scheduler;
     // 2024-03-09 12:00（本地）；3 月 10 日 02:30 不存在（02:00 → 03:00）
     const auto start = DateTime::FromParts( { 2024, 3, 9, 12, 0, 0, 0, 0, 0 } ).value();
-    scheduler.AdvanceTo( start.ToTimestamp(), kSteady0 );
+    scheduler.Poll( start.ToTimestamp(), kSteady0 );
 
-    auto id = scheduler.Add( std::make_shared<CalendarTrigger>( CalendarTrigger::Daily( 2, 30 ) ),
+    auto id = scheduler.Schedule( std::make_shared<CalendarTrigger>( CalendarTrigger::Daily( 2, 30 ) ),
                              []( const DateTime & ) {} );
     ASSERT_TRUE( id );
 
@@ -473,9 +473,9 @@ TEST( TaskSchedulerTest, DstFallBackFiresOnceAtEarlierInstant ) {
     TaskScheduler scheduler;
     // 2024-11-03 02:00 EDT 回拨为 01:00 EST：本地 01:30 出现两次（EDT 与 EST）
     const auto start = DateTime::FromParts( { 2024, 11, 2, 12, 0, 0, 0, 0, 0 } ).value();
-    scheduler.AdvanceTo( start.ToTimestamp(), kSteady0 );
+    scheduler.Poll( start.ToTimestamp(), kSteady0 );
 
-    auto id = scheduler.Add( std::make_shared<CalendarTrigger>( CalendarTrigger::Daily( 1, 30 ) ),
+    auto id = scheduler.Schedule( std::make_shared<CalendarTrigger>( CalendarTrigger::Daily( 1, 30 ) ),
                              []( const DateTime & ) {} );
     ASSERT_TRUE( id );
 
@@ -492,7 +492,7 @@ TEST( TaskSchedulerTest, DstFallBackFiresOnceAtEarlierInstant ) {
     EXPECT_EQ( next->ToTimestamp(), earlier.ToTimestamp() );
 
     // 只触发一次：推进到较早时刻之后，下一个计划点应为次日（较晚的重复时刻不再触发）
-    scheduler.AdvanceTo( earlier.ToTimestamp(), kSteady0 + std::chrono::seconds( 1 ) );
+    scheduler.Poll( earlier.ToTimestamp(), kSteady0 + std::chrono::seconds( 1 ) );
     const auto after_fire = scheduler.NextFireTime( *id );
     ASSERT_TRUE( after_fire.has_value() );
     EXPECT_EQ( after_fire->Day(), 4 );
@@ -502,12 +502,12 @@ TEST( TaskSchedulerTest, DstFallBackFiresOnceAtEarlierInstant ) {
 // ============================ 抖动 ============================
 TEST( TaskSchedulerTest, JitterShiftsOnlyFirstOccurrence ) {
     TaskScheduler scheduler;
-    scheduler.AdvanceTo( WallUtc( 2024, 1, 1, 0, 0 ), kSteady0 );
+    scheduler.Poll( WallUtc( 2024, 1, 1, 0, 0 ), kSteady0 );
 
     TaskPolicy policy;
     policy.jitter = Milliseconds( 500 );
 
-    auto id = scheduler.Add( std::make_shared<CalendarTrigger>(
+    auto id = scheduler.Schedule( std::make_shared<CalendarTrigger>(
                                  CalendarTrigger::Daily( 0, 0, 0, TimeZone::Utc() ) ),
                              []( const DateTime & ) {}, policy );
     ASSERT_TRUE( id );
@@ -549,7 +549,7 @@ TEST( TaskSchedulerTest, ThreadAdapterStartStop ) {
     TaskScheduler    scheduler;
     std::atomic<int> fires{ 0 };
 
-    auto id = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::milliseconds( 20 ) ),
+    auto id = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::milliseconds( 20 ) ),
                              [&]( const DateTime & ) { fires.fetch_add( 1 ); } );
     ASSERT_TRUE( id );
 
@@ -569,7 +569,7 @@ TEST( TaskSchedulerTest, ThreadAdapterStopTimeoutWithSlowInlineTask ) {
     TaskScheduler     scheduler;
     std::atomic<bool> action_started{ false };
 
-    auto id = scheduler.Add( std::make_shared<AtTrigger>( DateTime::Now().Add<Milliseconds>( 20 ) ),
+    auto id = scheduler.Schedule( std::make_shared<AtTrigger>( DateTime::Now().Add<Milliseconds>( 20 ) ),
                              [&]( const DateTime & ) {
                                  action_started.store( true );
                                  std::this_thread::sleep_for( std::chrono::milliseconds( 400 ) );
@@ -611,7 +611,7 @@ TEST( TaskSchedulerTest, ThreadAdapterSyncedWallClock ) {
     DateTime::SetTimeSeed( seed );
 
     std::atomic<int> fires{ 0 };
-    auto             id = scheduler.Add( std::make_shared<AtTrigger>( DateTime( seed + std::chrono::milliseconds( 30 ) ) ),
+    auto             id = scheduler.Schedule( std::make_shared<AtTrigger>( DateTime( seed + std::chrono::milliseconds( 30 ) ) ),
                                          [&]( const DateTime & ) { fires.fetch_add( 1 ); } );
     ASSERT_TRUE( id );
 
@@ -630,7 +630,7 @@ TEST( TaskSchedulerTest, ThreadAdapterThreadPoolKeepsDispatchingDuringSlowTask )
     std::atomic<bool> slow_started{ false };
 
     // 慢任务：一次性，占用池线程 ~300ms
-    auto slow_id = scheduler.Add( std::make_shared<AtTrigger>( DateTime::Now().Add<Milliseconds>( 10 ) ),
+    auto slow_id = scheduler.Schedule( std::make_shared<AtTrigger>( DateTime::Now().Add<Milliseconds>( 10 ) ),
                                   [&]( const DateTime & ) {
                                       slow_started.store( true );
                                       std::this_thread::sleep_for( std::chrono::milliseconds( 300 ) );
@@ -638,7 +638,7 @@ TEST( TaskSchedulerTest, ThreadAdapterThreadPoolKeepsDispatchingDuringSlowTask )
     ASSERT_TRUE( slow_id );
 
     // 快任务：20ms 固定周期
-    auto fast_id = scheduler.Add( std::make_shared<IntervalTrigger>( std::chrono::milliseconds( 20 ) ),
+    auto fast_id = scheduler.Schedule( std::make_shared<IntervalTrigger>( std::chrono::milliseconds( 20 ) ),
                                   [&]( const DateTime & ) { fast_fires.fetch_add( 1 ); } );
     ASSERT_TRUE( fast_id );
 
