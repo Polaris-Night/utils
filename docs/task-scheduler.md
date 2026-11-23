@@ -2,7 +2,7 @@
 
 头文件：`TaskScheduler.h`、`TaskExecutor.h`、`ThreadPoolExecutor.h` · 命名空间：`utils`
 
-`TaskScheduler` 是一个**时间驱动的任务调度器**，与数据驱动的窗口、物理计时的 `Timer` 互补。
+`TaskScheduler` 是一个**时间驱动的任务调度器**，与数据驱动的窗口、物理计时的 `ElapsedTimer` / `DeadlineTimer` 互补。
 它把“何时触发”（触发器）与“如何执行”（执行器）解耦，核心是纯确定性的 `Poll`：
 
 - **无内部时钟读取、无 sleep**：时间由调用者传入，单元测试可精确控制；

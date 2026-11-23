@@ -123,8 +123,7 @@ public:
                                    TimeZone zone = TimeZone::Local() );
 
     /// 每月 day 日的 hour:minute:second 触发
-    static CalendarTrigger Monthly( int day, int hour, int minute, int second = 0,
-                                    TimeZone zone = TimeZone::Local() );
+    static CalendarTrigger Monthly( int day, int hour, int minute, int second = 0, TimeZone zone = TimeZone::Local() );
 
     [[nodiscard]] std::optional<DateTime> NextAfter( const DateTime &after ) const override;
 
@@ -184,7 +183,7 @@ private:
 /**
  * @brief 时间驱动的任务调度器
  *
- * 定位：与数据驱动的 SlidingWindow、物理计时的 Timer 互补的"主动唤醒"组件。
+ * 定位：与数据驱动的 SlidingWindow、物理计时的 ElapsedTimer / DeadlineTimer 互补的"主动唤醒"组件。
  *
  * 时间语义（双时间轴）：
  *   - steady 轴（IntervalTrigger）：物理时长，免疫系统改时；
@@ -316,19 +315,19 @@ private:
     };
 
     struct Task {
-        TaskId     id{ 0 };
-        Action     action;
-        TaskPolicy policy;
+        TaskId                     id{ 0 };
+        Action                     action;
+        TaskPolicy                 policy;
         std::shared_ptr<TaskState> state;
 
         std::shared_ptr<WallTrigger>   wall_trigger;
         std::shared_ptr<SteadyTrigger> steady_trigger;
 
-        bool      scheduled{ false };
-        bool      is_steady{ false };
-        Timestamp wall_next{};     ///< wall 任务下次触发
+        bool       scheduled{ false };
+        bool       is_steady{ false };
+        Timestamp  wall_next{};    ///< wall 任务下次触发
         SteadyTime steady_next{};  ///< steady 任务下次触发
-        DateTime  wall_label{};    ///< 下次触发对应的回调标签
+        DateTime   wall_label{};   ///< 下次触发对应的回调标签
 
         DateTime   wall_anchor{};    ///< steady 任务的逻辑墙钟锚点
         SteadyTime steady_anchor{};  ///< steady 任务的单调时钟锚点
@@ -354,21 +353,22 @@ private:
     using WallHeap   = std::priority_queue<WallEntry, std::vector<WallEntry>, std::greater<WallEntry>>;
     using SteadyHeap = std::priority_queue<SteadyEntry, std::vector<SteadyEntry>, std::greater<SteadyEntry>>;
 
-    void DispatchWallFire( const std::shared_ptr<Task> &task, const Timestamp &wall_now, std::vector<PendingJob> &jobs );
+    void DispatchWallFire( const std::shared_ptr<Task> &task, const Timestamp &wall_now,
+                           std::vector<PendingJob> &jobs );
     void DispatchSteadyFire( const std::shared_ptr<Task> &task, const SteadyTime &steady_now,
                              std::vector<PendingJob> &jobs );
     void SubmitAction( const std::shared_ptr<Task> &task, const DateTime &scheduled, std::vector<PendingJob> &jobs );
 
     [[nodiscard]] Timestamp WallNow() const;
-    void                  RunLoop();
+    void                    RunLoop();
 
 private:
-    mutable std::mutex mutex_;
+    mutable std::mutex                                mutex_;
     std::unordered_map<TaskId, std::shared_ptr<Task>> tasks_;
-    WallHeap   wall_heap_;
-    SteadyHeap steady_heap_;
-    TaskId     next_id_{ 1 };
-    std::size_t pending_count_{ 0 };
+    WallHeap                                          wall_heap_;
+    SteadyHeap                                        steady_heap_;
+    TaskId                                            next_id_{ 1 };
+    std::size_t                                       pending_count_{ 0 };
 
     Timestamp  wall_now_{ DateTime::NowTimestamp() };
     SteadyTime steady_now_{ std::chrono::steady_clock::now() };

@@ -46,7 +46,7 @@ C++17 通用工具库（静态库 `utils`）：文件与字符串处理、时区
 | `StringFormatter` | `StringUtil.h` | `%1` 占位符风格的字符串格式化 |
 | `StringParser` | `StringUtil.h` | 基于模板规则（如 `name={name},age={age}`）的文本解析与取值 |
 | `DateTime` | `DateTime.h` | 时区感知的日期时间值类型，`ToXXX`/`FromXXX` 转换矩阵：chrono / `time_t` / `tm` / Unix 秒-毫秒-微秒-纳秒 / 字符串（strftime 风格 + ISO 8601）；日历加法与周期边界（`Add` / `StartOf` / `EndOf`）、按粒度比较；服务器时间种子（抗系统时间篡改） |
-| `Timer` / `ElapsedTimer` | `Timer.h` | 超时判定与累计计时 |
+| `ElapsedTimer` / `DeadlineTimer` | `ElapsedTimer.h` / `DeadlineTimer.h` | 经过多久 / 还剩多久与到期判定；时钟可模板化（默认 steady，支持 system 与自定义） |
 | `TaskScheduler` | `TaskScheduler.h` | 时间驱动任务调度器：双时间轴、`Poll` 确定性推进、线程适配器（`Start`/`Stop`）、触发器（一次性 / 固定周期 / 每日-每周-每月日历 / 自定义）、迟到策略（CatchUp / Skip + grace）、coalesce、抖动、任务统计 |
 | `TaskExecutor` / `ThreadPoolExecutor` | `TaskExecutor.h` / `ThreadPoolExecutor.h` | 执行器接口（默认同步 `InlineExecutor`）与工作线程池（仅入队不阻塞派发、有界队列背压、析构排空后 join） |
 | `SlidingWindow` | `SlidingWindow.h` | 泛型滑动窗口族：`RuleWindow` 为统一引擎（组合时间/条数/权重），`CountWindow`、`TimeWindow`、`ThresholdWindow` 是其单维度特例，另有 `SessionWindow`、`PredicateWindow`；统一 `OnAdd`/`OnRemove` 回调；`Poll(now)` 缺席驱动（空闲时也能裁剪/结束会话；无时间维度时为空操作），会话经 `OnClose`、条件拒绝经 `OnReject` 通知 |
@@ -212,7 +212,7 @@ if ( auto stats = scheduler.GetTaskStats( *id ) ) {
 | [文件与归档](docs/filesystem.md) | `File`、`FileUtil`、`LockedFile`、`TarUtil` |
 | [任务调度](docs/task-scheduler.md) | `TaskScheduler`、触发器、`TaskPolicy`、执行器、确定性 `Poll` |
 | [窗口](docs/windows.md) | `WindowPolicy`、`TumblingWindow`、`SlidingWindow` 族 |
-| [并发与计时](docs/concurrency.md) | `ThreadPoolExecutor`、`Timer`、`ElapsedTimer`、`Throttler`、`ConsumableOptional`、`SingleTrigger` |
+| [并发与计时](docs/concurrency.md) | `ThreadPoolExecutor`、`ElapsedTimer`、`DeadlineTimer`、`Throttler`、`ConsumableOptional`、`SingleTrigger` |
 | [通用工具](docs/utilities.md) | `Result`、`Compare`、`ResourceGuard`、`Macros`、`Pimpl`、`BreakpadHandler` |
 
 ## 测试

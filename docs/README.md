@@ -18,7 +18,7 @@
 | [文件与归档](filesystem.md) | `File`、`FileUtil`、`LockedFile`、`TarUtil` | 读写文件、目录遍历、临时文件、文件锁、tar 压缩 |
 | [任务调度](task-scheduler.md) | `TaskScheduler`、触发器、`TaskPolicy`、`TaskExecutor` | 定时/周期任务、日历任务、确定性时间推进 |
 | [窗口](windows.md) | `WindowPolicy`、`TumblingWindow`、`SlidingWindow` 族 | 滑动窗口聚合、滚动窗口分桶、会话窗口、条件窗口 |
-| [并发与计时](concurrency.md) | `ThreadPoolExecutor`、`Timer`、`ElapsedTimer`、`Throttler`、`ConsumableOptional`、`SingleTrigger` | 线程池、超时/计时、节流、一次性交接 |
+| [并发与计时](concurrency.md) | `ThreadPoolExecutor`、`ElapsedTimer`、`DeadlineTimer`、`Throttler`、`ConsumableOptional`、`SingleTrigger` | 线程池、经过/剩余计时、节流、一次性交接 |
 | [通用工具](utilities.md) | `Result`、`Compare`、`ResourceGuard`、`Macros`、`Pimpl`、`BreakpadHandler` | 错误处理、浮点比较、RAII、pimpl、崩溃转储 |
 
 ## 按任务查找
@@ -36,6 +36,7 @@
 | 用 `name={name},age={age}` 解析日志行 | [`StringParser`](string.md#stringparser) |
 | 递归删除目录并统计条目数 | [`FileUtil::RemoveAll`](filesystem.md#fileutil) |
 | 有界队列 + 背压的线程池 | [`ThreadPoolExecutor`](concurrency.md#threadpoolexecutor) |
+| 测量一段代码耗时 / 判断是否超时 | [计时组件总览](concurrency.md#计时组件总览) |
 | 链式传播错误而不抛异常 | [`Result`](utilities.md#result) |
 | 限制函数调用频率 | [`Throttler`](concurrency.md#throttler) |
 
@@ -74,6 +75,7 @@
 - `WindowPolicy.h` 是窗口两族**唯一**的共享依赖；`TumblingWindow` 与 `SlidingWindow` 彼此不依赖。
 - `TaskScheduler` 与窗口族**零依赖**，可单独使用，也可在同一主循环里各自 `Poll`。
 - `ThreadPoolExecutor` 只依赖 `TaskExecutor` 接口，可注入调度器，也可单独当线程池用。
+- `ElapsedTimer` / `DeadlineTimer` 只依赖 `Clock.h`（后者依赖 `DateTime.h` 做时间戳转换），可独立使用。
 
 ## 错误处理风格
 

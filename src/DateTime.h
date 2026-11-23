@@ -144,17 +144,17 @@ private:
  * （如 12:00:00.123456789 -> ms=123, us=456, ns=789）。
  */
 struct DateTimeParts {
-    int     year{ 1970 };        ///< 年（1900-9999）
-    int     month{ 1 };          ///< 月（1-12）
-    int     day{ 1 };            ///< 日（1-31）
-    int     hour{ 0 };           ///< 时（0-23）
-    int     minute{ 0 };         ///< 分（0-59）
-    int     second{ 0 };         ///< 秒（0-59）
-    int     millisecond{ 0 };    ///< 毫秒位（0-999）
-    int     microsecond{ 0 };    ///< 微秒位（0-999）
-    int     nanosecond{ 0 };     ///< 纳秒位（0-999）
-    Weekday weekday{ Thursday }; ///< 星期（由转换填充；构造时忽略）
-    int     day_of_year{ 1 };    ///< 年内第几天（1-366，由转换填充；构造时忽略）
+    int     year{ 1970 };         ///< 年（1900-9999）
+    int     month{ 1 };           ///< 月（1-12）
+    int     day{ 1 };             ///< 日（1-31）
+    int     hour{ 0 };            ///< 时（0-23）
+    int     minute{ 0 };          ///< 分（0-59）
+    int     second{ 0 };          ///< 秒（0-59）
+    int     millisecond{ 0 };     ///< 毫秒位（0-999）
+    int     microsecond{ 0 };     ///< 微秒位（0-999）
+    int     nanosecond{ 0 };      ///< 纳秒位（0-999）
+    Weekday weekday{ Thursday };  ///< 星期（由转换填充；构造时忽略）
+    int     day_of_year{ 1 };     ///< 年内第几天（1-366，由转换填充；构造时忽略）
 };
 
 // ==================== DateTime ====================
@@ -163,7 +163,7 @@ struct DateTimeParts {
  * @brief 时区感知的日期时间值类型
  *
  * 定位：墙钟日期时间（chrono / time_t / tm / Unix 数值 / 字符串）之间的统一表示、
- * 转换与运算入口。单调计时请使用 Timer / ElapsedTimer。
+ * 转换与运算入口。单调计时请使用 ElapsedTimer / DeadlineTimer。
  *
  * 语义约定：
  *   - 内部只保存"时刻 + 时区"两个值，所有字段解析按需进行（Local 时区的夏令时始终正确）；
@@ -226,8 +226,7 @@ public:
      *       手工构造 tm 且不确定夏令时状态时，建议显式设置 tm_isdst = -1。
      * @return std::optional<DateTime> 时区转换失败（时间超出可表示范围）时返回 std::nullopt
      */
-    [[nodiscard]] static std::optional<DateTime> FromTm( const std::tm         &tm,
-                                                         const TimeZone &zone = TimeZone::Local() );
+    [[nodiscard]] static std::optional<DateTime> FromTm( const std::tm &tm, const TimeZone &zone = TimeZone::Local() );
 
     /**
      * @brief 由组件构造
@@ -236,7 +235,7 @@ public:
      *         日超出当月天数）时返回 std::nullopt；不做自动归一化
      */
     [[nodiscard]] static std::optional<DateTime> FromParts( const DateTimeParts &parts,
-                                                            const TimeZone           &zone = TimeZone::Local() );
+                                                            const TimeZone      &zone = TimeZone::Local() );
 
     /**
      * @brief 解析时间字符串（strftime 占位符风格）
@@ -266,7 +265,7 @@ public:
      * @return std::optional<DateTime> 解析失败或字段非法时返回 std::nullopt
      */
     [[nodiscard]] static std::optional<DateTime> FromIso8601( std::string_view text,
-                                                             const TimeZone &default_zone = TimeZone::Local() );
+                                                              const TimeZone  &default_zone = TimeZone::Local() );
 
     /**
      * @brief 输出 ISO 8601 字符串
@@ -317,17 +316,17 @@ public:
 
     // ---- 组件访问（便捷方法，等价于 ToParts() 取字段）----
 
-    [[nodiscard]] int Year() const { return ToParts().year; }
-    [[nodiscard]] int Month() const { return ToParts().month; }
-    [[nodiscard]] int Day() const { return ToParts().day; }
-    [[nodiscard]] int Hour() const { return ToParts().hour; }
-    [[nodiscard]] int Minute() const { return ToParts().minute; }
-    [[nodiscard]] int Second() const { return ToParts().second; }
-    [[nodiscard]] int Millisecond() const { return ToParts().millisecond; }
-    [[nodiscard]] int Microsecond() const { return ToParts().microsecond; }
-    [[nodiscard]] int Nanosecond() const { return ToParts().nanosecond; }
+    [[nodiscard]] int     Year() const { return ToParts().year; }
+    [[nodiscard]] int     Month() const { return ToParts().month; }
+    [[nodiscard]] int     Day() const { return ToParts().day; }
+    [[nodiscard]] int     Hour() const { return ToParts().hour; }
+    [[nodiscard]] int     Minute() const { return ToParts().minute; }
+    [[nodiscard]] int     Second() const { return ToParts().second; }
+    [[nodiscard]] int     Millisecond() const { return ToParts().millisecond; }
+    [[nodiscard]] int     Microsecond() const { return ToParts().microsecond; }
+    [[nodiscard]] int     Nanosecond() const { return ToParts().nanosecond; }
     [[nodiscard]] Weekday GetWeekday() const { return ToParts().weekday; }
-    [[nodiscard]] int GetDayOfYear() const { return ToParts().day_of_year; }
+    [[nodiscard]] int     GetDayOfYear() const { return ToParts().day_of_year; }
 
     // ---- 日历辅助 ----
 
@@ -488,11 +487,15 @@ public:
     [[nodiscard]] constexpr bool operator!=( const DateTime &other ) const noexcept {
         return timestamp_ != other.timestamp_;
     }
-    [[nodiscard]] constexpr bool operator<( const DateTime &other ) const noexcept { return timestamp_ < other.timestamp_; }
+    [[nodiscard]] constexpr bool operator<( const DateTime &other ) const noexcept {
+        return timestamp_ < other.timestamp_;
+    }
     [[nodiscard]] constexpr bool operator<=( const DateTime &other ) const noexcept {
         return timestamp_ <= other.timestamp_;
     }
-    [[nodiscard]] constexpr bool operator>( const DateTime &other ) const noexcept { return timestamp_ > other.timestamp_; }
+    [[nodiscard]] constexpr bool operator>( const DateTime &other ) const noexcept {
+        return timestamp_ > other.timestamp_;
+    }
     [[nodiscard]] constexpr bool operator>=( const DateTime &other ) const noexcept {
         return timestamp_ >= other.timestamp_;
     }
